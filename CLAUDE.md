@@ -34,10 +34,12 @@ care/
 - `apps/web/src/components/shared`, `apps/web/src/features`에 실제 구현(DataTable/FormField/PageLayout/ConfirmDialog 등)을 추가할 때는 이 구조를 유지한다.
 
 ## Architecture
+- NestJS(apps/api) 작업 시 `.claude/skills/nestjs-best-practices` 참고.
 - 모든 업무 로직·DB 접근은 apps/api에만 작성한다.
 - API 타입은 Orval 생성물만 사용한다. generated 디렉터리·routeTree.gen.ts 수정 금지.
 
 ## Frontend
+- React(apps/web) 작업 시 `.claude/skills/react-best-practices` 참고.
 - UI 프리미티브는 shadcn CLI로만 추가하고 components/ui 중복 구현 금지.
 - Tailwind + cva + cn만 사용. 다른 스타일링 방식·UI 라이브러리 금지.
 - 디자인 토큰 외 임의 색상값(arbitrary value) 금지.
