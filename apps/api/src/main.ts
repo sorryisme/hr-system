@@ -1,3 +1,6 @@
+// 로컬 개발용: .env가 있으면 읽어 process.env를 채운다. 운영에서는 시크릿 관리 솔루션이
+// 이미 실제 환경변수를 주입하므로 이 호출은 아무 것도 덮어쓰지 않는다(no-op).
+import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';

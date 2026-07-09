@@ -6,6 +6,9 @@
 //   - ApprovalHistory: append-only 트리거 (UPDATE/DELETE 차단)
 //   - LeaveBalance.remaining / SubstituteHolidayBalance.remaining: GENERATED ALWAYS AS ... STORED
 //   - Facility.stagingRatio / approvalSteps, ApprovalLine.stepNo: CHECK 제약
+//
+// Prisma v7: 커넥션 URL은 여기 두지 않는다. CLI(migrate 등)는 ../prisma.config.ts,
+// 런타임 PrismaClient는 src/prisma/prisma.service.ts의 @prisma/adapter-mariadb를 사용한다.
 
 generator client {
   provider = "prisma-client-js"
@@ -13,7 +16,6 @@ generator client {
 
 datasource db {
   provider = "mysql"
-  url      = env("DATABASE_URL")
 }
 
 // =============================================================
