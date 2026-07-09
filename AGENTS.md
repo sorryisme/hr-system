@@ -1,7 +1,37 @@
 # AGENTS.md
 
 이 저장소는 pnpm workspace 기반 모노레포입니다 (`apps/api` = NestJS 백엔드, `apps/web` = Vite/React 프론트엔드).
-아키텍처 확정안은 `architecture-v3-final.md` 참고.
+
+## 프로젝트 구조
+
+```
+care/
+├─ apps/
+│  ├─ api/                     # NestJS 11 (Express adapter)
+│  │  └─ src/
+│  │     ├─ main.ts             # bootstrap, Swagger(/api/docs, /api/docs/json)
+│  │     ├─ app.module.ts / app.controller.ts / app.service.ts
+│  │     └─ app.controller.spec.ts
+│  │     # 도메인 모듈·DB 계층(Prisma)·인증(JWT/RBAC) 미구현 — 기본 스캐폴드만 존재
+│  └─ web/                     # Vite 8 + React 19
+│     └─ src/
+│        ├─ routes/             # TanStack Router 파일기반 라우팅 (__root.tsx, index.tsx)
+│        ├─ routeTree.gen.ts    # 자동 생성물 — 수정 금지
+│        ├─ components/
+│        │  ├─ ui/              # shadcn 프리미티브 (button, input, label, table, dialog, dropdown-menu)
+│        │  └─ shared/          # 공통 컴포넌트 — 현재 디렉터리만 존재(.gitkeep), 구현 없음
+│        ├─ features/           # 도메인별 컴포넌트 — 현재 디렉터리만 존재(.gitkeep), 구현 없음
+│        └─ lib/utils.ts        # shadcn cn() 헬퍼
+└─ docs/
+   ├─ architecture/architecture-v3-final.md   # 확정 아키텍처
+   ├─ plan/                                    # 기능요구사항·개발계획 (근태/근무표/가산점수 등 도메인 규칙)
+   ├─ ddl/carehome_tms_ddl_v1.1.sql             # MySQL DDL (Prisma 미도입, 스키마만 존재)
+   ├─ mock-ui/                                  # 결재 등 화면 목업
+   └─ {날짜}-{작업제목}.md                       # 코드 작업 산출물 (General 규칙에 따라 생성)
+```
+
+- Orval 연동(OpenAPI → 프론트 타입)은 apps/web에 실제 API 클라이언트가 필요해지는 시점에 구성한다. 그 전까지 apps/web은 백엔드를 호출하지 않는다.
+- `apps/web/src/components/shared`, `apps/web/src/features`에 실제 구현(DataTable/FormField/PageLayout/ConfirmDialog 등)을 추가할 때는 이 구조를 유지한다.
 
 ## Architecture
 - 모든 업무 로직·DB 접근은 apps/api에만 작성한다.
