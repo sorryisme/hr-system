@@ -297,8 +297,10 @@ model LeaveBalance {
   used        Decimal  @default(0) @db.Decimal(4, 1)
   /// 대기중 예약(제출 시 가산, 종결 시 해제) — D-2 이중신청 방지
   reserved    Decimal  @default(0) @db.Decimal(4, 1)
-  /// DB 생성 컬럼 — 읽기 전용
-  remaining   Decimal  @db.Decimal(5, 1)
+  /// DB 생성 컬럼(GENERATED ALWAYS AS ... STORED) — 읽기 전용. dbgenerated로 표시해
+  /// create() 시 값을 생략할 수 있게 한다. 앱에서 이 필드에 값을 명시적으로 쓰지 말 것
+  /// (쓰면 MySQL이 생성 컬럼 직접 삽입을 거부한다).
+  remaining   Decimal  @default(dbgenerated("(granted - used - reserved)")) @db.Decimal(5, 1)
   updatedAt   DateTime @default(now()) @updatedAt @map("updated_at")
 
   employee Employee @relation(fields: [employeeId], references: [id])
@@ -316,8 +318,10 @@ model SubstituteHolidayBalance {
   granted     Decimal  @default(0) @db.Decimal(4, 1)
   used        Decimal  @default(0) @db.Decimal(4, 1)
   reserved    Decimal  @default(0) @db.Decimal(4, 1)
-  /// DB 생성 컬럼 — 읽기 전용
-  remaining   Decimal  @db.Decimal(5, 1)
+  /// DB 생성 컬럼(GENERATED ALWAYS AS ... STORED) — 읽기 전용. dbgenerated로 표시해
+  /// create() 시 값을 생략할 수 있게 한다. 앱에서 이 필드에 값을 명시적으로 쓰지 말 것
+  /// (쓰면 MySQL이 생성 컬럼 직접 삽입을 거부한다).
+  remaining   Decimal  @default(dbgenerated("(granted - used - reserved)")) @db.Decimal(5, 1)
   updatedAt   DateTime @default(now()) @updatedAt @map("updated_at")
 
   employee Employee @relation(fields: [employeeId], references: [id])
