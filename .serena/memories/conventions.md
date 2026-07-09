@@ -1,0 +1,5 @@
+apps/api: `strict: true`, `module`/`moduleResolution: nodenext`, decorators enabled for Nest DI. Business logic + DB access must live only here (CLAUDE.md) — apps/web must never talk to the DB directly.
+
+apps/web: `strict: true`, `@/*` path alias. Styling: Tailwind v4 + `cva` + `cn` only — no other styling lib, no arbitrary Tailwind color values outside the design tokens (CLAUDE.md). `src/components/ui` = shadcn-CLI-managed primitives only; `src/components/shared` = project-wide shared components; `src/features` = per-domain components — the latter two are currently empty scaffolds.
+
+Repo-wide: `any` is banned; any `eslint-disable` needs a recorded reason (CLAUDE.md). After any instructed code task, write a deliverable doc into `docs/` named `{date}-{task-title}.md` — check the existing subfolder split (`docs/plan`, `docs/architecture`, `docs/ddl`, `docs/mock-ui`) before picking where new docs belong.

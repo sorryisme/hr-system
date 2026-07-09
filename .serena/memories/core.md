@@ -1,0 +1,7 @@
+care = 장기요양기관(요양원) 근태관리 SaaS. pnpm workspace monorepo: `apps/api` (NestJS 11, Express adapter) + `apps/web` (Vite 8 + React 19 + TanStack Router).
+
+- Repo-wide binding rules (architecture boundaries, auth, DB/infra, dependency policy, "any" ban, doc-deliverable rule) live in `/CLAUDE.md` (== `/AGENTS.md`) — always consult before non-trivial changes; not duplicated in these memories.
+- Reference docs: `docs/architecture/architecture-v3-final.md` (확정 아키텍처), `docs/plan/plan_0709.md` (기능요구사항/도메인 규칙 — see `mem:domain`), `docs/plan/dev_plan_0709.md`, `docs/ddl/carehome_tms_ddl_v1.1.sql` (MySQL DDL), `docs/setup-log.md` (초기 셋업 이력 + 알려진 격차, dated 2026-07-09 — some items already stale, e.g. it says "no git commits" but the repo now has commits).
+- Current implementation state: scaffolding only. apps/api has just the default Nest app.module/controller/service; no Prisma/DB, no auth. apps/web has shadcn ui primitives installed but `src/components/shared` and `src/features` are empty (`.gitkeep` only, no DataTable/FormField/PageLayout/ConfirmDialog etc). No Orval pipeline wired yet.
+- Module memories: `mem:api/core` (backend specifics), `mem:web/core` (frontend specifics).
+- Tech/tooling versions and pinning rationale: `mem:tech_stack`. Commands: `mem:suggested_commands`. Code conventions beyond CLAUDE.md: `mem:conventions`. Definition of done: `mem:task_completion`. Business/calculation rules for the attendance/scheduling engine: `mem:domain`.

@@ -1,10 +1,6 @@
 ---
 name: commit
-description: >
-  스테이징된 변경을 분석해 프로젝트 컨벤션(Conventional Commits + 한국어)에 맞는
-  커밋 메시지를 작성하고 커밋한다. 사용자가 커밋을 요청하거나, 커밋 메시지를
-  써달라고 하거나, "이거 커밋해줘"라고 할 때 사용.
-argument-hint: [추가 컨텍스트(선택)]
+description: 스테이징된 변경을 분석해 프로젝트 컨벤션(Conventional Commits + 한국어)에 맞는  커밋 메시지를 작성하고 커밋한다. 사용자가 커밋을 요청하거나, 커밋 메시지를  써달라고 하거나, "이거 커밋해줘"라고 할 때 사용
 allowed-tools: Bash(git *), Read
 ---
 
@@ -23,6 +19,10 @@ allowed-tools: Bash(git *), Read
 위 diff를 분석해 아래 컨벤션에 맞는 커밋 메시지를 작성한 뒤 커밋한다.
 스테이징된 변경이 없으면 커밋하지 말고 `git status` 요약과 함께
 "스테이징된 변경이 없습니다"라고 알린다.
+
+`git status --short`에 새로 추가되거나(`??`, `A`) 삭제된(` D`) 파일이 있다면,
+커밋 메시지를 작성하기 전에 `git add`(신규/수정) 또는 `git add -A`(삭제 포함)로
+먼저 스테이징한 뒤 진행한다.
 
 ### 형식 (Conventional Commits + 한국어)
 
