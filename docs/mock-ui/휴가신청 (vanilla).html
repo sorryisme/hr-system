@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>휴가 신청 — 종사자 모바일 (순수 HTML/CSS/JS)</title>
+<!--
+  ============================================================
+  요양원 근태관리 Phase 1 — 종사자 모바일 휴가 신청 UI
+  순수 HTML + CSS + Vanilla JS (프레임워크/라이브러리 없음)
+
+  [화면 구성 — 6개 스크린, .screen 요소를 JS로 전환]
+    #screen-home    홈: 잔여 연차/휴일대체 + 신청 진입 + 최근 신청
+    #screen-step1   1/3단계: 날짜 선택 (달력, 다중 선택)
+    #screen-step2   2/3단계: 종류 선택 (연차/오전반차/오후반차/휴일대체)
+    #screen-step3   3/3단계: 확인 + 신청
+    #screen-done    완료 화면
+    #screen-status  내 신청 현황 목록
+
+  [비즈니스 규칙 — 기획서 v3.1]
+    - 연차(ANNUAL): 선택일수 × 1일 차감
+    - 반차(HALF_AM/HALF_PM): 0.5일 차감, 하루만 선택 가능 (D-1)
+    - 휴일대체(SUBSTITUTE): 유대 잔여 1건 차감, 하루만 선택 가능 (C-2)
+    - 잔여 부족 시 종류 버튼 비활성 + 안내 문구 (US-01)
+    - 이미 대기/승인된 날짜는 달력에서 선택 차단 (US-01)
+    - 과거 7일 이내 날짜는 "사후 신청" 라벨로 허용 (D-3)
+    - 당일/전날 18시 이후 신청은 차단 없이 경고만 (D-4)
+    - 대기중 표기: "연차 2일 신청 (결재 대기중)" → 승인 후 "연차 2일" (US-02)
+    - 대기(PENDING) 건만 본인 취소 가능 (US-03)
+    - 사유 입력 강제 없음 (시니어 UX 원칙)
+
+  [디자인 토큰]
+    배경 크림 #FBF7F1 / 주색 돌봄그린 #2F7A6B / 경고 #B5732A / 오류 #C0503C
+    글꼴 Noto Sans KR, 본문 17px+, 버튼 22px+, 탭 타깃 48px+
+  ============================================================
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+/* ==================== 토큰 ==================== */
+:root {
+  --bg: #FBF7F1;          /* 화면 배경 (크림) */
+  --ink: #2B2622;         /* 본문 글자 */
+  --ink-sub: #8A7F70;     /* 보조 글자 */
+  --ink-mid: #5C5347;
+  --green: #2F7A6B;       /* 주색: 돌봄 그린 */
+  --green-dark: #276559;
+  --green-bg: #E1EDE8;
+  --amber: #B5732A;       /* 경고/대기 */
+  --amber-bg: #FBEFD8;
+  --red: #C0503C;         /* 오류/반려 */
+  --red-bg: #F8E9E4;
+  --line: #ECE4D7;        /* 카드 테두리 */
+  --muted-bg: #F0EADF;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 40px 16px; background: #EDE6DA;
+  font-family: 'Noto Sans KR', system-ui, sans-serif;
+  color: var(--ink); -webkit-font-smoothing: antialiased;
+  display: flex; justify-content: center;
+}
+
+/* ==================== 폰 프레임 ==================== */
+.phone {
+  width: 410px; background: #1F1B16; border-radius: 52px; padding: 14px;
+  box-shadow: 0 40px 80px -30px rgba(40,30,15,.55);
+}
+.phone-screen {
+  position: relative; height: 830px; background: var(--bg);
+  border-radius: 40px; overflow: hidden; display: flex; flex-direction: column;
+}
+.statusbar {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 16px 26px 6px; font-size: 15px; font-weight: 700; flex: none;
+}
+.statusbar .facility { font-size: 13px; }
+
+/* ==================== 스크린 전환 ==================== */
+.screen { display: none; flex: 1; flex-direction: column; padding: 16px 22px 26px; overflow: hidden; }
+.screen.active { display: flex; }
+
+/* ==================== 공통 요소 ==================== */
+.topbar { display: flex; align-items: center; gap: 14px; flex: none; }
+.btn-back {
+  border: none; background: var(--muted-bg); width: 48px; height: 48px;
+  border-radius: 16px; cursor: pointer; font-size: 24px; font-weight: 900; color: var(--ink-mid);
+}
+.step-label { font-size: 16px; font-weight: 700; color: var(--ink-sub); }
+h2.q { font-size: 26px; font-weight: 900; margin: 14px 0 4px; line-height: 1.3; }
+.hint { font-size: 16px; color: var(--ink-sub); margin: 0 0 10px; }
+
+.btn-primary {
+  width: 100%; border: none; cursor: pointer; background: var(--green); color: #fff;
+  border-radius: 22px; padding: 22px; font-size: 25px; font-weight: 900;
+  font-family: inherit; box-shadow: 0 14px 26px -12px rgba(47,122,107,.7); transition: background .15s;
+}
+.btn-primary:hover { background: var(--green-dark); }
+.btn-primary:disabled { background: #E7DFD3; color: #B3A997; cursor: not-allowed; box-shadow: none; }
+.btn-secondary {
+  width: 100%; border: 2px solid var(--line); background: #fff; cursor: pointer;
+  border-radius: 22px; padding: 18px; font-size: 20px; font-weight: 700;
+  color: var(--ink-mid); font-family: inherit;
+}
+
+.card { background: #fff; border: 1.5px solid var(--line); border-radius: 22px; }
+
+/* 상태 배지 (색+텍스트 병행 — 색약 대응 N-2) */
+.pill { font-size: 16px; font-weight: 800; padding: 5px 14px; border-radius: 999px; }
+.pill.pending  { color: var(--amber); background: var(--amber-bg); }
+.pill.approved { color: var(--green); background: var(--green-bg); }
+.pill.rejected { color: var(--red);   background: var(--red-bg); }
+.pill.post { font-size: 14px; padding: 4px 10px; color: var(--amber); background: var(--amber-bg); }
+
+/* ==================== 홈 ==================== */
+.greet-sub { font-size: 20px; font-weight: 500; color: #6B635B; }
+.greet-name { font-size: 30px; font-weight: 900; margin-top: 2px; }
+.balances { display: flex; gap: 12px; margin-top: 20px; }
+.balance-card { flex: 1; border-radius: 22px; padding: 18px 20px; }
+.balance-card.annual { background: var(--green-bg); }
+.balance-card.substitute { background: var(--amber-bg); }
+.balance-card .label { font-size: 16px; font-weight: 500; }
+.balance-card.annual .label { color: #3E6B60; }
+.balance-card.substitute .label { color: #9A7B3A; }
+.balance-card .value { font-size: 34px; font-weight: 900; line-height: 1.1; margin-top: 4px; }
+.balance-card.annual .value { color: var(--green); }
+.balance-card.substitute .value { color: var(--amber); }
+
+.btn-apply {
+  margin-top: 18px; width: 100%; border: none; cursor: pointer; background: var(--green);
+  color: #fff; border-radius: 26px; padding: 28px 24px; text-align: left;
+  display: flex; align-items: center; justify-content: space-between;
+  font-family: inherit; box-shadow: 0 14px 26px -12px rgba(47,122,107,.7); transition: background .15s;
+}
+.btn-apply:hover { background: var(--green-dark); }
+.btn-apply .title { display: block; font-size: 28px; font-weight: 900; }
+.btn-apply .sub { display: block; font-size: 17px; font-weight: 500; opacity: .85; margin-top: 4px; }
+.btn-apply .arrow { font-size: 34px; font-weight: 900; }
+
+.section-row { margin-top: 26px; display: flex; align-items: center; justify-content: space-between; }
+.section-row .title { font-size: 20px; font-weight: 900; }
+.link-btn { border: none; background: none; cursor: pointer; font-size: 17px; font-weight: 700; color: var(--green); font-family: inherit; }
+
+.req-list { margin-top: 14px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
+.req-card { padding: 18px 20px; }
+.req-card .row1 { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.req-card .type { font-size: 17px; font-weight: 500; color: var(--ink-sub); }
+.req-card .dates { font-size: 21px; font-weight: 700; margin-top: 8px; }
+.req-card .reason {
+  margin-top: 10px; font-size: 16px; color: var(--red); background: var(--red-bg);
+  border-radius: 14px; padding: 10px 14px; line-height: 1.5;
+}
+.btn-cancel {
+  margin-top: 14px; width: 100%; border: 2px solid var(--line); background: var(--bg);
+  cursor: pointer; border-radius: 16px; padding: 14px; font-size: 18px;
+  font-weight: 700; color: var(--ink-mid); font-family: inherit;
+}
+
+/* ==================== 1단계: 달력 ==================== */
+.calendar { padding: 14px; }
+.calendar .month { text-align: center; font-size: 19px; font-weight: 900; margin-bottom: 10px; }
+.calendar .dow, .calendar .days { display: grid; grid-template-columns: repeat(7,1fr); }
+.calendar .dow { text-align: center; font-size: 15px; font-weight: 700; color: #A79C8C; margin-bottom: 4px; }
+.calendar .dow .sun { color: var(--red); } .calendar .dow .sat { color: #3E6B94; }
+.calendar .days { gap: 3px; }
+.day {
+  display: flex; align-items: center; justify-content: center; height: 54px;
+  border-radius: 16px; font-size: 21px; font-weight: 700; cursor: pointer;
+  border: none; background: none; font-family: inherit; color: var(--ink); transition: all .12s;
+}
+.day.sun { color: var(--red); } .day.sat { color: #3E6B94; }
+.day.selected { background: var(--green); color: #fff; box-shadow: 0 6px 14px -6px rgba(47,122,107,.8); }
+.day.past { color: var(--amber); background: #FDF6E9; }        /* 사후 신청 가능 (7일 이내) */
+.day.too-old { color: #D8CFC0; cursor: default; }              /* 신청 불가 (7일 초과 과거) */
+.day.blocked { color: #B3A997; background: var(--muted-bg); text-decoration: line-through; } /* 기존 신청 존재 */
+
+.blocked-msg {
+  margin-top: 10px; background: var(--red-bg); border-radius: 14px; padding: 12px 16px;
+  font-size: 16px; font-weight: 700; color: var(--red); text-align: center;
+}
+.step1-footer { margin-top: auto; padding-top: 12px; }
+.selection-text { font-size: 18px; font-weight: 700; color: #3E6B60; min-height: 26px; text-align: center; margin-bottom: 10px; }
+
+/* ==================== 2단계: 종류 선택 ==================== */
+.type-list { display: flex; flex-direction: column; gap: 12px; }
+.type-btn {
+  width: 100%; text-align: left; border-radius: 22px; padding: 20px 22px;
+  display: flex; align-items: center; gap: 16px; cursor: pointer;
+  border: 2px solid var(--line); background: #fff; font-family: inherit; transition: all .12s;
+}
+.type-btn:hover:not(:disabled) { border-color: var(--green); background: #F4F9F7; }
+.type-btn:disabled { border-color: var(--muted-bg); background: #F7F2EA; cursor: not-allowed; }
+.type-btn .icon {
+  flex: none; width: 56px; height: 56px; border-radius: 16px;
+  display: flex; align-items: center; justify-content: center; font-size: 28px;
+}
+.type-btn:disabled .icon { opacity: .45; }
+.type-btn .title { display: block; font-size: 23px; font-weight: 900; color: var(--ink); }
+.type-btn:disabled .title { color: #B3A997; }
+.type-btn .sub { display: block; font-size: 16px; color: var(--ink-sub); margin-top: 2px; }
+.type-msg { margin-top: 6px; font-size: 15px; font-weight: 700; color: var(--red); padding: 0 8px; }
+.type-msg:empty { display: none; }
+
+/* ==================== 3단계: 확인 ==================== */
+.confirm-card { padding: 24px; }
+.confirm-card .label { font-size: 17px; font-weight: 700; color: var(--ink-sub); }
+.confirm-card .dates { font-size: 25px; font-weight: 900; line-height: 1.4; margin-top: 8px; }
+.confirm-card .tags { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.tag-type { font-size: 19px; font-weight: 700; color: var(--green); background: var(--green-bg); border-radius: 14px; padding: 8px 16px; }
+.tag-post { font-size: 19px; font-weight: 700; color: var(--amber); background: var(--amber-bg); border-radius: 14px; padding: 8px 16px; }
+.confirm-card hr { border: none; height: 1.5px; background: #F0EAE0; margin: 20px 0; }
+.balance-row { display: flex; align-items: center; justify-content: space-between; }
+.balance-row .label { font-size: 19px; font-weight: 500; color: var(--ink-mid); }
+.balance-row .change { font-size: 22px; font-weight: 900; }
+.balance-row .arrow { color: #A79C8C; } .balance-row .after { color: var(--green); }
+
+.notice { margin-top: 12px; border-radius: 16px; padding: 14px 18px; font-size: 16px; line-height: 1.5; color: #9A7B3A; }
+.notice.warn { background: var(--amber-bg); }
+.notice.info { background: #FBF3E6; }
+.step3-footer { margin-top: auto; padding-top: 14px; display: flex; flex-direction: column; gap: 10px; }
+
+/* ==================== 완료 ==================== */
+#screen-done { background: var(--green); align-items: center; justify-content: center; text-align: center; padding: 0 34px; margin-top: -66px; }
+@keyframes popCheck { 0% { transform: scale(.4); opacity: 0; } 60% { transform: scale(1.12); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
+@keyframes riseUp { from { transform: translateY(14px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+.done-check {
+  width: 130px; height: 130px; border-radius: 50%; background: rgba(255,255,255,.16);
+  display: flex; align-items: center; justify-content: center; animation: popCheck .5s ease-out both;
+}
+.done-title { color: #fff; font-size: 34px; font-weight: 900; margin-top: 34px; animation: riseUp .5s ease-out .15s both; }
+.done-sub { color: rgba(255,255,255,.9); font-size: 21px; line-height: 1.6; margin-top: 14px; animation: riseUp .5s ease-out .25s both; }
+.done-btn {
+  margin-top: 44px; border: none; cursor: pointer; background: #fff; color: var(--green);
+  border-radius: 20px; padding: 20px 40px; font-size: 22px; font-weight: 900;
+  font-family: inherit; animation: riseUp .5s ease-out .35s both;
+}
+.done-home {
+  margin-top: 14px; border: none; cursor: pointer; background: none;
+  color: rgba(255,255,255,.85); font-size: 18px; font-weight: 700;
+  font-family: inherit; animation: riseUp .5s ease-out .45s both;
+}
+
+/* ==================== 홈 인디케이터 ==================== */
+.home-indicator {
+  position: absolute; bottom: 9px; left: 50%; transform: translateX(-50%);
+  width: 130px; height: 5px; border-radius: 3px; background: rgba(0,0,0,.18);
+}
+</style>
+</head>
+<body>
+
+<div class="phone">
+  <div class="phone-screen">
+    <div class="statusbar"><span>9:41</span><span class="facility">돌봄손길 요양원</span></div>
+
+    <!-- ============ 홈 ============ -->
+    <section class="screen active" id="screen-home" data-screen-label="홈">
+      <div>
+        <div class="greet-sub">안녕하세요,</div>
+        <div class="greet-name">김순자 선생님</div>
+      </div>
+      <div class="balances">
+        <div class="balance-card annual">
+          <div class="label">남은 연차</div>
+          <div class="value" id="home-balance">5일</div>
+        </div>
+        <div class="balance-card substitute">
+          <div class="label">받은 휴일대체</div>
+          <div class="value" id="home-sub-balance">1일</div>
+        </div>
+      </div>
+      <button class="btn-apply" data-action="start-apply">
+        <span><span class="title">휴가 신청하기</span><span class="sub">3번만 누르면 끝나요</span></span>
+        <span class="arrow">→</span>
+      </button>
+      <div class="section-row">
+        <span class="title">내 신청 현황</span>
+        <button class="link-btn" data-action="go-status">전체 보기 →</button>
+      </div>
+      <div class="req-list" id="home-req-list"><!-- JS 렌더: 최근 2건 --></div>
+    </section>
+
+    <!-- ============ 1/3단계: 날짜 선택 ============ -->
+    <section class="screen" id="screen-step1" data-screen-label="1단계 날짜 선택">
+      <div class="topbar">
+        <button class="btn-back" data-action="go-home">←</button>
+        <span class="step-label">1 / 3 단계</span>
+      </div>
+      <h2 class="q">쉬고 싶은 날을 골라 주세요</h2>
+      <p class="hint">여러 날을 눌러도 돼요 · 지난 날은 7일 전까지 신청돼요</p>
+      <div class="card calendar">
+        <div class="month" id="cal-month">2026년 7월</div>
+        <div class="dow"><span class="sun">일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span class="sat">토</span></div>
+        <div class="days" id="cal-days"><!-- JS 렌더 --></div>
+      </div>
+      <div class="blocked-msg" id="blocked-msg" hidden></div>
+      <div class="step1-footer">
+        <div class="selection-text" id="selection-text"></div>
+        <button class="btn-primary" id="btn-step1-next" data-action="step1-next" disabled>다음</button>
+      </div>
+    </section>
+
+    <!-- ============ 2/3단계: 종류 선택 ============ -->
+    <section class="screen" id="screen-step2" data-screen-label="2단계 종류 선택">
+      <div class="topbar">
+        <button class="btn-back" data-action="go-step1">←</button>
+        <span class="step-label">2 / 3 단계</span>
+      </div>
+      <h2 class="q">어떻게 쉬실 건가요?</h2>
+      <div class="type-list" id="type-list"><!-- JS 렌더: 4개 유형 버튼 --></div>
+    </section>
+
+    <!-- ============ 3/3단계: 확인 ============ -->
+    <section class="screen" id="screen-step3" data-screen-label="3단계 확인">
+      <div class="topbar">
+        <button class="btn-back" data-action="go-step1">←</button>
+        <span class="step-label">3 / 3 단계</span>
+      </div>
+      <h2 class="q">이렇게 신청할까요?</h2>
+      <div class="card confirm-card">
+        <div class="label">신청 내용</div>
+        <div class="dates" id="confirm-dates"></div>
+        <div class="tags">
+          <span class="tag-type" id="confirm-type"></span>
+          <span class="tag-post" id="confirm-post-tag" hidden>사후 신청</span>
+        </div>
+        <hr>
+        <div class="balance-row">
+          <span class="label" id="confirm-balance-label">남은 연차</span>
+          <span class="change"><span id="confirm-before"></span> <span class="arrow">→</span> <span class="after" id="confirm-after"></span></span>
+        </div>
+      </div>
+      <div class="notice warn" id="deadline-warning" hidden>⏰ 쉬는 날이 코앞이에요. 원래는 전날 저녁 6시까지 신청하는 게 좋아요. 승인이 늦어질 수 있어요.</div>
+      <div class="notice warn" id="post-apply-notice" hidden>지나간 날짜예요. "사후 신청"으로 접수됩니다.</div>
+      <div class="notice info">사유를 꼭 적지 않아도 됩니다. 필요하면 관리자가 여쭤봅니다.</div>
+      <div class="step3-footer">
+        <button class="btn-primary" data-action="submit">신청하기</button>
+        <button class="btn-secondary" data-action="go-step1">다시 고치기</button>
+      </div>
+    </section>
+
+    <!-- ============ 완료 ============ -->
+    <section class="screen" id="screen-done" data-screen-label="신청 완료">
+      <div class="done-check">
+        <svg width="72" height="72" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="done-title">신청 완료!</div>
+      <div class="done-sub">승인되면 바로 알려드릴게요.<br>편히 계세요 :)</div>
+      <button class="done-btn" data-action="go-status">내 신청 보기</button>
+      <button class="done-home" data-action="go-home">홈으로</button>
+    </section>
+
+    <!-- ============ 내 신청 현황 ============ -->
+    <section class="screen" id="screen-status" data-screen-label="내 신청 현황">
+      <div class="topbar">
+        <button class="btn-back" data-action="go-home">←</button>
+        <span style="font-size:22px; font-weight:900;">내 신청 현황</span>
+      </div>
+      <div class="req-list" id="status-req-list" style="margin-top:20px; gap:14px;"><!-- JS 렌더: 전체 --></div>
+    </section>
+
+    <div class="home-indicator"></div>
+  </div>
+</div>
+
+<script>
+'use strict';
+/* ============================================================
+ * 상태 (state) — 애플리케이션의 단일 진실 공급원
+ * ============================================================ */
+const state = {
+  screen: 'home',        // 'home' | 'step1' | 'step2' | 'step3' | 'done' | 'status'
+  selectedDays: [],      // 1단계에서 선택한 날짜 (7월의 일(day) 숫자 배열)
+  selectedType: null,    // 'ANNUAL' | 'HALF_AM' | 'HALF_PM' | 'SUBSTITUTE'
+  balance: 5,            // 남은 연차 (일 단위, 반차로 0.5 가능)
+  subBalance: 1,         // 받은 유급휴일대체 (건 단위)
+  requests: [            // 내 신청 목록 (최신순)
+    // status: 'PENDING'(대기) | 'APPROVED'(승인) | 'REJECTED'(반려)
+    { status: 'PENDING',  type: 'ANNUAL',  days: [21, 22], reason: null, postApply: false },
+    { status: 'REJECTED', type: 'HALF_AM', days: [15],     reason: '당일 물리치료 일정이 겹칩니다.', postApply: false },
+    { status: 'APPROVED', type: 'ANNUAL',  days: [3],      reason: null, postApply: false },
+  ],
+};
+
+/* 데모 고정값: 2026년 7월 달력, 오늘 = 7월 10일 (실제 7월이면 실제 날짜 사용) */
+const DEMO = { year: 2026, month: 6 /* 0-index: 7월 */ };
+function today() {
+  const now = new Date();
+  return (now.getFullYear() === DEMO.year && now.getMonth() === DEMO.month) ? now.getDate() : 10;
+}
+
+/* ============================================================
+ * 도메인 규칙 (기획서 v3.1)
+ * ============================================================ */
+const TYPE_META = {
+  ANNUAL:     { name: '연차',     title: '하루 종일 쉬기', sub: '연차 (하루 사용)',        icon: '☀️', iconBg: '#E1EDE8' },
+  HALF_AM:    { name: '오전반차', title: '오전만 쉬기',    sub: '오전 반차 (반나절 사용)', icon: '🌤️', iconBg: '#FBEFD8' },
+  HALF_PM:    { name: '오후반차', title: '오후만 쉬기',    sub: '오후 반차 (반나절 사용)', icon: '🌇', iconBg: '#EAE3F2' },
+  SUBSTITUTE: { name: '휴일대체', title: '휴일대체로 쉬기', sub: '유급휴일대체 (하루 사용)', icon: '🎁', iconBg: '#FDE8E0' },
+};
+
+/* 유형별 연차 차감량. 휴일대체는 연차가 아니라 유대 잔여에서 1건 차감 */
+function deductAmount(type, dayCount) {
+  if (type === 'ANNUAL') return dayCount;
+  if (type === 'SUBSTITUTE') return 0;
+  return 0.5 * dayCount; // 반차 (D-1: 0.5일)
+}
+
+/* 대기/승인 상태 신청이 있는 날짜 집합 — 중복 신청 차단용 (US-01) */
+function blockedDaySet() {
+  const set = new Set();
+  for (const r of state.requests) {
+    if (r.status === 'PENDING' || r.status === 'APPROVED') r.days.forEach(d => set.add(d));
+  }
+  return set;
+}
+
+/* 2단계 각 유형의 선택 가능 여부. 불가하면 사유 문자열 반환, 가능하면 null (US-01, C-2) */
+function typeDisabledReason(type) {
+  const n = state.selectedDays.length;
+  if (type === 'ANNUAL') {
+    if (n > state.balance) return `남은 연차가 ${state.balance}일입니다. ${n}일을 신청할 수 없어요.`;
+  } else if (type === 'HALF_AM' || type === 'HALF_PM') {
+    if (n > 1) return '반차는 하루만 선택할 수 있어요.';
+    if (state.balance < 0.5) return '남은 연차가 부족해요.';
+  } else if (type === 'SUBSTITUTE') {
+    if (state.subBalance < 1) return '받은 휴일대체가 없어요.';   // C-2
+    if (n > 1) return '휴일대체는 하루만 선택할 수 있어요.';
+  }
+  return null;
+}
+
+/* 선택 날짜에 과거일 포함 여부 — "사후 신청" 라벨 (D-3) */
+function hasPastSelected() { return state.selectedDays.some(d => d < today()); }
+
+/* 마감 임박 경고 여부 — 당일 또는 (내일 && 18시 이후). 차단하지 않음 (D-4) */
+function hasDeadlineWarning() {
+  const t = today(), hour = new Date().getHours();
+  return state.selectedDays.some(d => d === t || (d === t + 1 && hour >= 18));
+}
+
+/* ============================================================
+ * 표시 문자열 유틸
+ * ============================================================ */
+function fmtDays(v) { return v + '일'; }
+
+/* [21,22] → "7월 21~22일", [3,10] → "7월 3, 10일" */
+function rangeText(days) {
+  const s = [...days].sort((a, b) => a - b);
+  if (s.length === 0) return '';
+  if (s.length === 1) return `7월 ${s[0]}일`;
+  const contiguous = s.every((v, i) => i === 0 || v === s[i - 1] + 1);
+  return contiguous ? `7월 ${s[0]}~${s[s.length - 1]}일` : `7월 ${s.join(', ')}일`;
+}
+
+/* 유형+수량 표기. 대기중엔 "… 신청 (결재 대기중)" 접미 (US-02) */
+function typeLabel(req) {
+  const meta = TYPE_META[req.type];
+  const amt = req.type === 'ANNUAL' ? `${req.days.length}일`
+            : req.type === 'SUBSTITUTE' ? '1일'
+            : `${0.5 * req.days.length}일`;
+  const core = `${meta.name} ${amt}`;
+  return req.status === 'PENDING' ? `${core} 신청 (결재 대기중)` : core;
+}
+
+const STATUS_TEXT = { PENDING: '대기중', APPROVED: '승인됨', REJECTED: '반려됨' };
+const STATUS_CLASS = { PENDING: 'pending', APPROVED: 'approved', REJECTED: 'rejected' };
+
+/* ============================================================
+ * 렌더링 — state를 읽어 DOM을 갱신
+ * ============================================================ */
+const $ = (sel) => document.querySelector(sel);
+
+function showScreen(name) {
+  state.screen = name;
+  document.querySelectorAll('.screen').forEach(el => el.classList.remove('active'));
+  $('#screen-' + name).classList.add('active');
+}
+
+function renderBalances() {
+  $('#home-balance').textContent = fmtDays(state.balance);
+  $('#home-sub-balance').textContent = fmtDays(state.subBalance);
+}
+
+/* 신청 카드 1장 생성 (홈 최근 목록 + 현황 목록 공용) */
+function buildRequestCard(req, index, withCancel) {
+  const card = document.createElement('div');
+  card.className = 'card req-card';
+
+  const row1 = document.createElement('div');
+  row1.className = 'row1';
+  const pill = document.createElement('span');
+  pill.className = 'pill ' + STATUS_CLASS[req.status];
+  pill.textContent = STATUS_TEXT[req.status];
+  const type = document.createElement('span');
+  type.className = 'type';
+  type.textContent = typeLabel(req);
+  row1.append(pill, type);
+  if (req.postApply) {
+    const post = document.createElement('span');
+    post.className = 'pill post';
+    post.textContent = '사후 신청';
+    row1.append(post);
+  }
+
+  const dates = document.createElement('div');
+  dates.className = 'dates';
+  dates.textContent = rangeText(req.days);
+  card.append(row1, dates);
+
+  if (req.reason) {
+    const reason = document.createElement('div');
+    reason.className = 'reason';
+    reason.textContent = '사유: ' + req.reason;
+    card.append(reason);
+  }
+  /* US-03: 대기 건만 본인 취소 가능 */
+  if (withCancel && req.status === 'PENDING') {
+    const btn = document.createElement('button');
+    btn.className = 'btn-cancel';
+    btn.textContent = '신청 취소';
+    btn.addEventListener('click', () => cancelRequest(index));
+    card.append(btn);
+  }
+  return card;
+}
+
+function renderRequestLists() {
+  const home = $('#home-req-list');
+  home.replaceChildren(...state.requests.slice(0, 2).map((r, i) => buildRequestCard(r, i, false)));
+  const status = $('#status-req-list');
+  status.replaceChildren(...state.requests.map((r, i) => buildRequestCard(r, i, true)));
+}
+
+/* 1단계 달력. 날짜 셀 상태: 선택됨 / 기존신청(차단) / 과거 7일 이내(사후) / 7일 초과(불가) */
+function renderCalendar() {
+  const t = today();
+  const blocked = blockedDaySet();
+  const firstDow = new Date(DEMO.year, DEMO.month, 1).getDay();
+  const daysInMonth = new Date(DEMO.year, DEMO.month + 1, 0).getDate();
+  const wrap = $('#cal-days');
+  wrap.replaceChildren();
+
+  for (let i = 0; i < firstDow; i++) wrap.append(document.createElement('span'));
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dow = (firstDow + d - 1) % 7;
+    const btn = document.createElement('button');
+    btn.className = 'day' + (dow === 0 ? ' sun' : dow === 6 ? ' sat' : '');
+    btn.textContent = d;
+
+    if (d < t - 7) {                       // 7일 초과 과거 → 선택 불가
+      btn.classList.add('too-old');
+      btn.disabled = true;
+    } else if (blocked.has(d)) {           // 기존 대기/승인 신청 → 차단 + 안내
+      btn.classList.add('blocked');
+      btn.addEventListener('click', () => showBlockedMessage(d));
+    } else {
+      if (state.selectedDays.includes(d)) btn.classList.add('selected');
+      else if (d < t) btn.classList.add('past');   // 사후 신청 가능 구간
+      btn.addEventListener('click', () => toggleDay(d));
+    }
+    wrap.append(btn);
+  }
+}
+
+function renderStep1Footer() {
+  const n = state.selectedDays.length;
+  let text = '';
+  if (n > 0) {
+    text = `${n}일을 선택했어요`;
+    if (hasPastSelected()) text += ' · 지난 날 포함(사후 신청)';
+  }
+  $('#selection-text').textContent = text;
+  $('#btn-step1-next').disabled = n === 0;
+}
+
+/* 2단계 유형 버튼 4종 렌더 — 비활성 사유가 있으면 버튼 아래 문구 노출 */
+function renderTypeOptions() {
+  const wrap = $('#type-list');
+  wrap.replaceChildren();
+  for (const type of ['ANNUAL', 'HALF_AM', 'HALF_PM', 'SUBSTITUTE']) {
+    const meta = TYPE_META[type];
+    const reason = typeDisabledReason(type);
+
+    const holder = document.createElement('div');
+    const btn = document.createElement('button');
+    btn.className = 'type-btn';
+    btn.disabled = !!reason;
+
+    const icon = document.createElement('span');
+    icon.className = 'icon';
+    icon.style.background = meta.iconBg;
+    icon.textContent = meta.icon;
+    const textWrap = document.createElement('span');
+    const title = document.createElement('span');
+    title.className = 'title';
+    title.textContent = meta.title;
+    const sub = document.createElement('span');
+    sub.className = 'sub';
+    sub.textContent = meta.sub;
+    textWrap.append(title, sub);
+    btn.append(icon, textWrap);
+    if (!reason) btn.addEventListener('click', () => pickType(type));
+    holder.append(btn);
+
+    if (reason) {
+      const msg = document.createElement('div');
+      msg.className = 'type-msg';
+      msg.textContent = reason;
+      holder.append(msg);
+    }
+    wrap.append(holder);
+  }
+}
+
+/* 3단계 확인 화면 렌더 */
+function renderConfirm() {
+  const type = state.selectedType;
+  const n = state.selectedDays.length;
+  const isSub = type === 'SUBSTITUTE';
+  const meta = TYPE_META[type];
+  const amt = type === 'ANNUAL' ? `${n}일` : isSub ? '1일' : `${0.5 * n}일`;
+
+  $('#confirm-dates').textContent = rangeText(state.selectedDays);
+  $('#confirm-type').textContent = `${meta.name} ${amt}`;
+  $('#confirm-post-tag').hidden = !hasPastSelected();
+  $('#post-apply-notice').hidden = !hasPastSelected();
+  $('#deadline-warning').hidden = !hasDeadlineWarning();
+
+  const before = isSub ? state.subBalance : state.balance;
+  const after = isSub ? state.subBalance - 1
+                      : +(state.balance - deductAmount(type, n)).toFixed(1);
+  $('#confirm-balance-label').textContent = isSub ? '받은 휴일대체' : '남은 연차';
+  $('#confirm-before').textContent = fmtDays(before);
+  $('#confirm-after').textContent = fmtDays(after);
+}
+
+/* ============================================================
+ * 액션(이벤트 핸들러) — state 변경 후 필요한 부분만 재렌더
+ * ============================================================ */
+function toggleDay(d) {
+  const i = state.selectedDays.indexOf(d);
+  if (i >= 0) state.selectedDays.splice(i, 1);
+  else state.selectedDays.push(d);
+  hideBlockedMessage();
+  renderCalendar();
+  renderStep1Footer();
+}
+
+function showBlockedMessage(d) {
+  const req = state.requests.find(r =>
+    (r.status === 'PENDING' || r.status === 'APPROVED') && r.days.includes(d));
+  const what = req ? `${TYPE_META[req.type].name} · ${STATUS_TEXT[req.status]}` : '기존 신청';
+  const el = $('#blocked-msg');
+  el.textContent = `7월 ${d}일은 이미 신청한 날이에요 (${what})`;
+  el.hidden = false;
+}
+function hideBlockedMessage() { $('#blocked-msg').hidden = true; }
+
+function pickType(type) {
+  state.selectedType = type;
+  renderConfirm();
+  showScreen('step3');
+}
+
+/* 제출: 신청 생성(PENDING) + 잔여 차감 + 완료 화면. 진동 피드백(N-6) */
+function submitRequest() {
+  if (navigator.vibrate) navigator.vibrate([30, 40, 30]);
+  const type = state.selectedType;
+  const days = [...state.selectedDays].sort((a, b) => a - b);
+
+  state.requests.unshift({ status: 'PENDING', type, days, reason: null, postApply: hasPastSelected() });
+  if (type === 'SUBSTITUTE') state.subBalance -= 1;
+  else state.balance = +(state.balance - deductAmount(type, days.length)).toFixed(1);
+
+  renderBalances();
+  renderRequestLists();
+  showScreen('done');
+}
+
+/* 대기 건 취소: 목록에서 제거 + 차감했던 잔여 복원 (US-03) */
+function cancelRequest(index) {
+  const req = state.requests[index];
+  if (!req || req.status !== 'PENDING') return;
+  state.requests.splice(index, 1);
+  if (req.type === 'SUBSTITUTE') state.subBalance += 1;
+  else state.balance = +(state.balance + deductAmount(req.type, req.days.length)).toFixed(1);
+  renderBalances();
+  renderRequestLists();
+  renderCalendar();
+}
+
+function resetFlow() {
+  state.selectedDays = [];
+  state.selectedType = null;
+  hideBlockedMessage();
+}
+
+/* ============================================================
+ * 네비게이션 — data-action 속성으로 위임 처리
+ * ============================================================ */
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-action]');
+  if (!btn) return;
+  switch (btn.dataset.action) {
+    case 'start-apply':
+      resetFlow(); renderCalendar(); renderStep1Footer(); showScreen('step1'); break;
+    case 'go-home':
+      resetFlow(); renderBalances(); renderRequestLists(); showScreen('home'); break;
+    case 'go-status':
+      renderRequestLists(); showScreen('status'); break;
+    case 'go-step1':
+      renderCalendar(); renderStep1Footer(); showScreen('step1'); break;
+    case 'step1-next':
+      if (state.selectedDays.length > 0) { renderTypeOptions(); showScreen('step2'); } break;
+    case 'submit':
+      submitRequest(); break;
+  }
+});
+
+/* 초기 렌더 */
+renderBalances();
+renderRequestLists();
+</script>
+</body>
+</html>
