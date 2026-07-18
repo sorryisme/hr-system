@@ -3,23 +3,24 @@
 import { config } from 'dotenv';
 config({ override: false });
 
+import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { patchBigIntJson } from './bigint-json';
+import { applyGlobalPrefix, createOpenApiDocument } from './openapi';
 
 patchBigIntJson();
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.enableShutdownHooks();
+  applyGlobalPrefix(app);
+  app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+  // 로컬 Vite dev 서버 전용. 운영 origin은 배포 구성 확정 시 별도 반영한다.
+  app.enableCors({ origin: ['http://localhost:5173'] });
 
-  const swaggerConfig = new DocumentBuilder()
-    .setTitle('Care API')
-    .setVersion('0.0.1')
-    .addBearerAuth()
-    .build();
-  const document = SwaggerModule.createDocument(app, swaggerConfig);
+  const document = createOpenApiDocument(app);
   SwaggerModule.setup('api/docs', app, document, {
     jsonDocumentUrl: 'api/docs/json',
   });

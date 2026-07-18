@@ -1,0 +1,81 @@
+import type { RequestDetailDto } from '@/api/generated/model'
+import { cn } from '@/lib/utils'
+import { JOB_ROLE_LABELS } from './labels'
+
+type StepState = 'done' | 'current' | 'upcoming' | 'rejected' | 'skipped'
+
+function stepState(detail: RequestDetailDto, stepNo: number): StepState {
+  if (stepNo <= detail.currentStep) return 'done'
+  if (detail.status === 'REJECTED') {
+    return stepNo === detail.currentStep + 1 ? 'rejected' : 'upcoming'
+  }
+  if (detail.status === 'APPROVED') {
+    // 전결 확정 시 남은 단계는 생략(D-13)
+    return detail.isFinalByDelegation ? 'skipped' : 'done'
+  }
+  return stepNo === detail.currentStep + 1 ? 'current' : 'upcoming'
+}
+
+const DOT_STYLES: Record<StepState, string> = {
+  done: 'bg-approve border-approve',
+  current: 'bg-background border-brand border-2',
+  upcoming: 'bg-background border-border border-2',
+  rejected: 'bg-reject border-reject',
+  skipped: 'bg-paper-strong border-border border-2',
+}
+
+const STATE_LABELS: Record<StepState, string> = {
+  done: '승인 완료',
+  current: '결재 대기',
+  upcoming: '예정',
+  rejected: '반려',
+  skipped: '전결 생략',
+}
+
+/** 결재 단계 표시(dot + connector). 단계 수 1~3 가변(§3.1) */
+export function ApprovalStepper({ detail }: { detail: RequestDetailDto }) {
+  return (
+    <div>
+      <div className="mb-2.5 text-sm font-bold">결재 단계</div>
+      <div className="flex items-start">
+        {detail.requestLines.map((line, i) => {
+          const state = stepState(detail, line.stepNo)
+          return (
+            <div key={line.stepNo} className="flex flex-1 items-start">
+              {i > 0 && (
+                <div
+                  className={cn(
+                    'mt-2 h-0.5 flex-1',
+                    line.stepNo <= detail.currentStep ? 'bg-approve' : 'bg-border',
+                  )}
+                />
+              )}
+              <div className="flex flex-col items-center gap-1.5 px-1">
+                <div className={cn('size-4 rounded-full border', DOT_STYLES[state])} />
+                <div className="text-center text-xs font-bold leading-tight">
+                  {line.stepNo}차
+                  <br />
+                  {JOB_ROLE_LABELS[line.approver.jobRole]}
+                </div>
+                <div
+                  className={cn(
+                    'text-xs',
+                    state === 'done' && 'text-approve',
+                    state === 'rejected' && 'text-reject',
+                    state === 'current' && 'font-bold text-brand',
+                    (state === 'upcoming' || state === 'skipped') && 'text-muted-foreground',
+                  )}
+                >
+                  {STATE_LABELS[state]}
+                  {line.stepNo === 2 && line.delegationEnabled && state !== 'skipped' && (
+                    <span className="ml-1 text-brand">(전결)</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
