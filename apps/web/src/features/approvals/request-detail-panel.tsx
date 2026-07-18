@@ -7,7 +7,7 @@ import {
   useGetRequest,
   useRejectRequest,
 } from '@/api/generated/endpoints'
-import type { RequestDetailDto } from '@/api/generated/model'
+import type { EmployeeSummaryDto, RequestDetailDto } from '@/api/generated/model'
 import { ApiError } from '@/api/mutator'
 import { Button } from '@/components/ui/button'
 import {
@@ -32,24 +32,33 @@ function errorMessage(error: unknown): string {
   return '요청 처리에 실패했습니다. 잠시 후 다시 시도해 주세요.'
 }
 
-/** 스냅샷 결재선의 결재자·대결자 후보(중복 제거). 인증 미도입 보완 — "결재자로 실행" 셀렉트의 소스 */
+/**
+ * 스냅샷 결재선의 결재자·대결자 후보(중복 제거). 인증 미도입 보완 — "결재자로 실행" 셀렉트의 소스.
+ * 같은 사람이 여러 단계에 걸쳐 있으면(예: 1차 대결자 = 2차 결재자) 현재 대기 중인 단계의
+ * 역할로 라벨을 표시한다 — 그렇지 않으면 지금 승인 대상이 아닌 과거/미래 단계 역할이 표시돼 혼동을 준다.
+ */
 function actorOptions(detail: RequestDetailDto) {
-  const seen = new Set<string>()
-  const options: { id: string; label: string }[] = []
+  const currentStepNo = detail.currentStep + 1
+  const byId = new Map<
+    string,
+    { id: string; name: string; jobRole: EmployeeSummaryDto['jobRole']; stepNo: number; role: string }
+  >()
   for (const line of detail.requestLines) {
     for (const [person, role] of [
       [line.approver, '결재자'],
       [line.deputy, '대결자'],
     ] as const) {
-      if (!person || seen.has(person.id)) continue
-      seen.add(person.id)
-      options.push({
-        id: person.id,
-        label: `${person.name} ${JOB_ROLE_LABELS[person.jobRole]} (${line.stepNo}차 ${role})`,
-      })
+      if (!person) continue
+      const existing = byId.get(person.id)
+      if (!existing || (existing.stepNo !== currentStepNo && line.stepNo === currentStepNo)) {
+        byId.set(person.id, { id: person.id, name: person.name, jobRole: person.jobRole, stepNo: line.stepNo, role })
+      }
     }
   }
-  return options
+  return [...byId.values()].map((p) => ({
+    id: p.id,
+    label: `${p.name} ${JOB_ROLE_LABELS[p.jobRole]} (${p.stepNo}차 ${p.role})`,
+  }))
 }
 
 export function RequestDetailPanel({ requestId }: { requestId: string | null }) {
@@ -182,6 +191,7 @@ function RequestDetailContent({ requestId }: { requestId: string }) {
               <div className="flex items-center gap-2">
                 <span className="shrink-0 text-[13px] text-muted-foreground">결재자로 실행</span>
                 <Select
+                  items={Object.fromEntries(options.map((o) => [o.id, o.label]))}
                   value={selectedActor ?? undefined}
                   onValueChange={(v) => setActorId(v)}
                 >
