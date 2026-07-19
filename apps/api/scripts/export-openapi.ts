@@ -8,9 +8,10 @@ import { AppModule } from '../src/app.module';
 import { applyGlobalPrefix, createOpenApiDocument } from '../src/openapi';
 
 async function main() {
-  // PrismaService 생성자 검증 통과용 더미 — 연결은 발생하지 않는다(시크릿 아님)
+  // PrismaService·AuthModule 생성자 검증 통과용 더미 — 연결·서명은 발생하지 않는다(시크릿 아님)
   process.env.DATABASE_URL ??=
     'mysql://openapi-export:none@localhost:3306/none';
+  process.env.JWT_SECRET ??= 'openapi-export-none';
 
   const app = await NestFactory.create(AppModule, { logger: false });
   applyGlobalPrefix(app);

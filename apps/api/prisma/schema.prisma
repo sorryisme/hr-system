@@ -108,6 +108,10 @@ model Employee {
   /// [v1.2] 소속 팀(직원 등록 시 지정, 변경 가능). 종사자는 본인 팀 근무만 조회(개인정보 보호 — 앱 레벨)
   teamId        BigInt?        @map("team_id") @db.UnsignedBigInt
   name          String         @db.VarChar(50)
+  /// 관리자 웹 로그인 ID(로컬 자체 JWT 단계). Cognito 전환 시 username 매핑 키로 재사용
+  email         String?        @unique(map: "uq_employee_email") @db.VarChar(255)
+  /// 비밀번호 해시(scrypt) — 평문 저장 금지. Cognito 전환 시 폐기 예정
+  passwordHash  String?        @map("password_hash") @db.VarChar(255)
   jobRole       JobRole        @map("job_role")
   isRn          Boolean        @default(false) @map("is_rn")
   systemRole    SystemRole     @default(STAFF) @map("system_role")

@@ -32,6 +32,8 @@ interface ErrorBody {
 export async function customFetch<T>(url: string, options: RequestInit): Promise<T> {
   const response = await fetch(`${BASE_URL}${url}`, {
     ...options,
+    // 인증은 httpOnly 쿠키(cs_access_token) — 토큰을 JS에서 다루지 않는다(CLAUDE.md Frontend)
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
       ...options.headers,
@@ -42,6 +44,11 @@ export async function customFetch<T>(url: string, options: RequestInit): Promise
   const body: unknown = text ? JSON.parse(text) : undefined
 
   if (!response.ok) {
+    // 세션 만료(쿠키 소멸·토큰 만료): 로그인 화면으로 전체 리로드해 앱 상태를 초기화한다.
+    // /auth/* 는 제외 — 로그인 실패(401)와 /auth/me의 미로그인 확인은 화면에서 직접 처리한다.
+    if (response.status === 401 && !url.startsWith('/api/auth/') && !window.location.pathname.startsWith('/login')) {
+      window.location.assign('/login')
+    }
     const err = (body ?? {}) as ErrorBody
     const message = Array.isArray(err.message)
       ? err.message.join(', ')
