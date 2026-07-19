@@ -48,6 +48,8 @@
     --color-reject-foreground: var(--reject-foreground);
     --color-paper: var(--paper);
     --color-paper-strong: var(--paper-strong);
+    --color-warning: var(--warning);
+    --color-warning-foreground: var(--warning-foreground);
     --radius-sm: calc(var(--radius) * 0.6);
     --radius-md: calc(var(--radius) * 0.8);
     --radius-lg: var(--radius);
@@ -100,6 +102,9 @@
     --reject-foreground: oklch(0.985 0 0);
     --paper: oklch(0.968 0.006 85);
     --paper-strong: oklch(0.943 0.012 85);
+    /* 대시보드 도메인 토큰 (목업 대쉬보드.html 팔레트): warning=앰버, 위반 경고·소멸 임박 등 주의 상태 */
+    --warning: oklch(0.6 0.15 75);
+    --warning-foreground: oklch(0.985 0 0);
 }
 
 .dark {
@@ -142,6 +147,8 @@
     --reject-foreground: oklch(0.145 0 0);
     --paper: oklch(0.205 0 0);
     --paper-strong: oklch(0.269 0 0);
+    --warning: oklch(0.65 0.15 75);
+    --warning-foreground: oklch(0.145 0 0);
 }
 
 @layer base {
