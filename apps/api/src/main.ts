@@ -18,7 +18,8 @@ async function bootstrap() {
   applyGlobalPrefix(app);
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   // 로컬 Vite dev 서버 전용. 운영 origin은 배포 구성 확정 시 별도 반영한다.
-  app.enableCors({ origin: ['http://localhost:5173'] });
+  // credentials: 인증 쿠키(cs_access_token)가 실리도록 허용
+  app.enableCors({ origin: ['http://localhost:5173'], credentials: true });
 
   const document = createOpenApiDocument(app);
   SwaggerModule.setup('api/docs', app, document, {

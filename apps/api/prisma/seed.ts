@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { PrismaMariaDb } from '@prisma/adapter-mariadb';
+import { hashPassword } from '../src/auth/password.util';
 
 // Prisma v7: bare `new PrismaClient()`는 드라이버 어댑터 없이는 생성이 거부된다.
 // DATABASE_URL은 prisma CLI(prisma.config.ts)가 .env에서 주입한다.
@@ -63,6 +64,14 @@ async function seedApprovalFixtures(facilityId: bigint) {
     teams[name] = team.id;
   }
 
+  // --- 관리자 웹 로그인 계정(로컬 개발용 — 운영 배포 시 실제 계정 정책으로 교체) ---
+  // 비밀번호는 전 계정 공통 'admin1234!' (scrypt 해시 저장, 평문 미저장)
+  const devPasswordHash = await hashPassword('admin1234!');
+  const adminCredentials: Record<string, { email: string; passwordHash: string }> = {
+    '1': { email: 'director@careshift.kr', passwordHash: devPasswordHash },
+    '2': { email: 'manager@careshift.kr', passwordHash: devPasswordHash },
+  };
+
   // --- 직원 (고정 id upsert). 1~3 = 결재 권한자(서명 더미 필수 — D-12), 4~8 = 신청자 ---
   const employees = [
     { id: 1n, name: '김평온', jobRole: 'DIRECTOR', systemRole: 'ADMIN', hireDate: new Date('2015-03-01'), canShiftWork: false, signaturePath: 'signatures/emp1.png' },
@@ -75,10 +84,12 @@ async function seedApprovalFixtures(facilityId: bigint) {
     { id: 8n, name: '강마루', jobRole: 'CAREGIVER', systemRole: 'STAFF', hireDate: new Date('2023-06-19'), teamId: teams['2층팀'] },
   ] as const;
   for (const emp of employees) {
+    // 로그인 계정은 update에도 넣는다 — 마이그레이션 이전에 만들어진 기존 행에도 반영되도록
+    const credential = adminCredentials[emp.id.toString()] ?? {};
     await prisma.employee.upsert({
       where: { id: emp.id },
-      update: {},
-      create: { facilityId, ...emp },
+      update: { ...credential },
+      create: { facilityId, ...credential, ...emp },
     });
   }
 

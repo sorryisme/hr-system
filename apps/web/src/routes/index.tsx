@@ -1,13 +1,8 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 
+// 앱 홈 = 대시보드. 미로그인이면 /dashboard의 requireAuth가 /login으로 보낸다
 export const Route = createFileRoute('/')({
-  component: HomeComponent,
+  beforeLoad: () => {
+    throw redirect({ to: '/dashboard' })
+  },
 })
-
-function HomeComponent() {
-  return (
-    <div className="flex min-h-svh items-center justify-center">
-      <h1 className="text-2xl font-medium text-foreground">Care</h1>
-    </div>
-  )
-}
