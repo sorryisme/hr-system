@@ -1,0 +1,605 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/api": {
+      "get": {
+        "operationId": "getHello",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "App"
+        ]
+      }
+    },
+    "/api/requests": {
+      "get": {
+        "operationId": "listRequests",
+        "parameters": [
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/InboxStatusFilter"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestListResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "requests"
+        ]
+      }
+    },
+    "/api/requests/{id}": {
+      "get": {
+        "operationId": "getRequest",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestDetailDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "requests"
+        ]
+      }
+    },
+    "/api/requests/{id}/approve": {
+      "post": {
+        "operationId": "approveRequest",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApproveRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestDetailDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "requests"
+        ]
+      }
+    },
+    "/api/requests/{id}/reject": {
+      "post": {
+        "operationId": "rejectRequest",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestDetailDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "requests"
+        ]
+      }
+    }
+  },
+  "info": {
+    "title": "Care API",
+    "description": "",
+    "version": "0.0.1",
+    "contact": {}
+  },
+  "tags": [],
+  "servers": [],
+  "components": {
+    "securitySchemes": {
+      "bearer": {
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "type": "http"
+      }
+    },
+    "schemas": {
+      "InboxStatusFilter": {
+        "type": "string",
+        "enum": [
+          "PENDING",
+          "APPROVED",
+          "REJECTED"
+        ]
+      },
+      "JobRole": {
+        "type": "string",
+        "enum": [
+          "DIRECTOR",
+          "OFFICE_MANAGER",
+          "SOCIAL_WORKER",
+          "NURSE",
+          "NURSE_AIDE",
+          "PHYSICAL_THERAPIST",
+          "OCCUPATIONAL_THERAPIST",
+          "CAREGIVER",
+          "CLERK",
+          "DIETITIAN",
+          "COOK",
+          "HYGIENIST",
+          "JANITOR"
+        ]
+      },
+      "EmployeeSummaryDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "jobRole": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/JobRole"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "jobRole"
+        ]
+      },
+      "ApprovalRequestType": {
+        "type": "string",
+        "enum": [
+          "ANNUAL",
+          "HALF_AM",
+          "HALF_PM",
+          "SUBSTITUTE_HOLIDAY",
+          "SHIFT_CHANGE",
+          "CANCEL"
+        ]
+      },
+      "ApprovalRequestStatus": {
+        "type": "string",
+        "enum": [
+          "PENDING",
+          "INTERIM_APPROVED",
+          "APPROVED",
+          "REJECTED",
+          "CANCELED",
+          "CANCELED_AFTER_APPROVAL"
+        ]
+      },
+      "ShiftTypeSummaryDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label"
+        ]
+      },
+      "RequestListItemDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "requester": {
+            "$ref": "#/components/schemas/EmployeeSummaryDto"
+          },
+          "type": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ApprovalRequestType"
+              }
+            ]
+          },
+          "status": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ApprovalRequestStatus"
+              }
+            ]
+          },
+          "currentStep": {
+            "type": "number"
+          },
+          "totalSteps": {
+            "type": "number"
+          },
+          "targetDates": {
+            "description": "YYYY-MM-DD",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "desiredShift": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ShiftTypeSummaryDto"
+              }
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true
+          },
+          "leaveDays": {
+            "type": "string",
+            "nullable": true,
+            "example": "2.0"
+          },
+          "isRetroactive": {
+            "type": "boolean",
+            "description": "사후 신청 라벨(D-3)"
+          },
+          "isFinalByDelegation": {
+            "type": "boolean",
+            "description": "전결로 최종 확정된 건(D-13)"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "requester",
+          "type",
+          "status",
+          "currentStep",
+          "totalSteps",
+          "targetDates",
+          "desiredShift",
+          "reason",
+          "leaveDays",
+          "isRetroactive",
+          "isFinalByDelegation",
+          "createdAt"
+        ]
+      },
+      "InboxCountsDto": {
+        "type": "object",
+        "properties": {
+          "pending": {
+            "type": "number"
+          },
+          "approved": {
+            "type": "number"
+          },
+          "rejected": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "pending",
+          "approved",
+          "rejected"
+        ]
+      },
+      "RequestListResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RequestListItemDto"
+            }
+          },
+          "counts": {
+            "$ref": "#/components/schemas/InboxCountsDto"
+          }
+        },
+        "required": [
+          "items",
+          "counts"
+        ]
+      },
+      "RequestLineDto": {
+        "type": "object",
+        "properties": {
+          "stepNo": {
+            "type": "number"
+          },
+          "approver": {
+            "$ref": "#/components/schemas/EmployeeSummaryDto"
+          },
+          "deputy": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EmployeeSummaryDto"
+              }
+            ]
+          },
+          "delegationEnabled": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "stepNo",
+          "approver",
+          "deputy",
+          "delegationEnabled"
+        ]
+      },
+      "ApprovalAction": {
+        "type": "string",
+        "enum": [
+          "SUBMIT",
+          "APPROVE",
+          "REJECT",
+          "CANCEL"
+        ]
+      },
+      "HistoryEntryDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "action": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ApprovalAction"
+              }
+            ]
+          },
+          "stepNo": {
+            "type": "number",
+            "nullable": true
+          },
+          "actor": {
+            "$ref": "#/components/schemas/EmployeeSummaryDto"
+          },
+          "isDelegatedFinal": {
+            "type": "boolean",
+            "description": "전결에 의한 최종 확정(출력 서식 \"전결\" 표기 근거)"
+          },
+          "comment": {
+            "type": "string",
+            "nullable": true
+          },
+          "signatureSnapshotPath": {
+            "type": "string",
+            "nullable": true
+          },
+          "actedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "action",
+          "stepNo",
+          "actor",
+          "isDelegatedFinal",
+          "comment",
+          "signatureSnapshotPath",
+          "actedAt"
+        ]
+      },
+      "RequestDetailDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "requester": {
+            "$ref": "#/components/schemas/EmployeeSummaryDto"
+          },
+          "type": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ApprovalRequestType"
+              }
+            ]
+          },
+          "status": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ApprovalRequestStatus"
+              }
+            ]
+          },
+          "currentStep": {
+            "type": "number"
+          },
+          "totalSteps": {
+            "type": "number"
+          },
+          "targetDates": {
+            "description": "YYYY-MM-DD",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "desiredShift": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ShiftTypeSummaryDto"
+              }
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true
+          },
+          "leaveDays": {
+            "type": "string",
+            "nullable": true,
+            "example": "2.0"
+          },
+          "isRetroactive": {
+            "type": "boolean",
+            "description": "사후 신청 라벨(D-3)"
+          },
+          "isFinalByDelegation": {
+            "type": "boolean",
+            "description": "전결로 최종 확정된 건(D-13)"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "finalizedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "requestLines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RequestLineDto"
+            }
+          },
+          "histories": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HistoryEntryDto"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "requester",
+          "type",
+          "status",
+          "currentStep",
+          "totalSteps",
+          "targetDates",
+          "desiredShift",
+          "reason",
+          "leaveDays",
+          "isRetroactive",
+          "isFinalByDelegation",
+          "createdAt",
+          "finalizedAt",
+          "requestLines",
+          "histories"
+        ]
+      },
+      "ApproveRequestDto": {
+        "type": "object",
+        "properties": {
+          "approverId": {
+            "type": "string",
+            "example": "3",
+            "description": "결재자 employee id"
+          }
+        },
+        "required": [
+          "approverId"
+        ]
+      },
+      "RejectRequestDto": {
+        "type": "object",
+        "properties": {
+          "approverId": {
+            "type": "string",
+            "example": "3",
+            "description": "결재자 employee id"
+          },
+          "comment": {
+            "type": "string",
+            "maxLength": 500,
+            "description": "반려 사유(필수)"
+          }
+        },
+        "required": [
+          "approverId",
+          "comment"
+        ]
+      }
+    }
+  }
+}

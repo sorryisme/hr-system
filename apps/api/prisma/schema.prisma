@@ -1,11 +1,12 @@
-// 기준 문서: docs/plan/dev_plan_0709.md (§3.5, §4) + docs/ddl/carehome_tms_ddl_v1.1.sql
+// 기준 문서: docs/plan/dev_plan_0709.md (§3.5, §4) + docs/ddl/carehome_tms_ddl_v1.2.sql
 //
 // 이 스키마는 위 DDL의 타입 레이어입니다. 아래 항목은 Prisma 스키마 언어로 표현할 수 없어
 // prisma/migrations의 손으로 작성한 SQL이 유일한 근거입니다 — 이 모델들에 대해
 // `prisma migrate dev`(자동 diff)를 실행하지 말 것. 항상 수동 마이그레이션으로 반영한다.
 //   - ApprovalHistory: append-only 트리거 (UPDATE/DELETE 차단)
 //   - LeaveBalance.remaining / SubstituteHolidayBalance.remaining: GENERATED ALWAYS AS ... STORED
-//   - Facility.stagingRatio / approvalSteps, ApprovalLine.stepNo: CHECK 제약
+//   - Facility.stagingRatio / approvalSteps, ApprovalLine.stepNo/delegationEnabled,
+//     SubstituteHolidayLedger.carryableMinutes: CHECK 제약
 //
 // Prisma v7: 커넥션 URL은 여기 두지 않는다. CLI(migrate 등)는 ../prisma.config.ts,
 // 런타임 PrismaClient는 src/prisma/prisma.service.ts의 @prisma/adapter-mariadb를 사용한다.
@@ -30,24 +31,47 @@ model Facility {
   staffingRatio     Decimal  @default(2.1) @map("staffing_ratio") @db.Decimal(3, 1)
   outsourcedMeal    Boolean  @default(false) @map("outsourced_meal")
   outsourcedLaundry Boolean  @default(false) @map("outsourced_laundry")
-  /// CHECK (approval_steps IN (1, 2)) — DB 레벨
-  approvalSteps     Int      @default(1) @map("approval_steps") @db.UnsignedTinyInt
+  /// [v1.2] CHECK (approval_steps BETWEEN 1 AND 3) — DB 레벨. 표준 3단계 = 사회복지사→사무국장→시설장 (D-13)
+  approvalSteps     Int      @default(3) @map("approval_steps") @db.UnsignedTinyInt
   gpsLat            Decimal? @map("gps_lat") @db.Decimal(10, 7)
   gpsLng            Decimal? @map("gps_lng") @db.Decimal(10, 7)
   gpsRadiusM        Int?     @default(100) @map("gps_radius_m") @db.UnsignedSmallInt
+  /// [v1.2] 출퇴근 태그 허용 시간 여유(교대 전후 n분, A-6 — Phase 3)
+  tagMarginMinutes  Int?     @default(30) @map("tag_margin_minutes") @db.UnsignedSmallInt
+  /// [v1.2] 태그 실패 시 관리자 호출 전화번호(C-11 — Phase 3). 실번호는 운영 설정에서 입력
+  adminCallPhone    String?  @map("admin_call_phone") @db.VarChar(20)
   addonTargetScore  Decimal? @map("addon_target_score") @db.Decimal(5, 2)
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @default(now()) @updatedAt @map("updated_at")
 
+  teams               Team[]
   employees           Employee[]
   shiftTypes          ShiftType[]
   approvalLines       ApprovalLine[]
   approvalRequests    ApprovalRequest[]
   monthlyCensuses     MonthlyCensus[]
+  dailyStaffingRules  DailyStaffingRule[]
   rosters             Roster[]
   shiftPatternPresets ShiftPatternPreset[]
 
   @@map("facility")
+}
+
+/// [v1.2 신설] 팀 (직원 등록 시 지정, 설정에서 변경 — §1.3, §4.5)
+model Team {
+  id         BigInt @id @default(autoincrement()) @db.UnsignedBigInt
+  facilityId BigInt @map("facility_id") @db.UnsignedBigInt
+  /// 예: 1층팀, 2층팀
+  name       String @db.VarChar(50)
+  sortOrder  Int    @default(0) @map("sort_order") @db.UnsignedSmallInt
+
+  facility Facility @relation(fields: [facilityId], references: [id])
+
+  employees          Employee[]
+  dailyStaffingRules DailyStaffingRule[]
+
+  @@unique([facilityId, name], map: "uq_team_name")
+  @@map("team")
 }
 
 enum JobRole {
@@ -81,10 +105,13 @@ enum EmployeeStatus {
 model Employee {
   id            BigInt         @id @default(autoincrement()) @db.UnsignedBigInt
   facilityId    BigInt         @map("facility_id") @db.UnsignedBigInt
+  /// [v1.2] 소속 팀(직원 등록 시 지정, 변경 가능). 종사자는 본인 팀 근무만 조회(개인정보 보호 — 앱 레벨)
+  teamId        BigInt?        @map("team_id") @db.UnsignedBigInt
   name          String         @db.VarChar(50)
   jobRole       JobRole        @map("job_role")
   isRn          Boolean        @default(false) @map("is_rn")
   systemRole    SystemRole     @default(STAFF) @map("system_role")
+  /// 연차연도(year_basis)·소멸 임박 판정(C-10)의 기준
   hireDate      DateTime       @map("hire_date") @db.Date
   status        EmployeeStatus @default(ACTIVE)
   canShiftWork  Boolean        @default(true) @map("can_shift_work")
@@ -96,23 +123,29 @@ model Employee {
   updatedAt     DateTime       @default(now()) @updatedAt @map("updated_at")
 
   facility Facility @relation(fields: [facilityId], references: [id])
+  team     Team?    @relation(fields: [teamId], references: [id])
 
-  devices                        UserDevice[]
-  approvalLinesAsApprover        ApprovalLine[]             @relation("ApprovalLineApprover")
-  approvalLinesAsDeputy          ApprovalLine[]             @relation("ApprovalLineDeputy")
-  approvalRequests               ApprovalRequest[]
-  approvalHistories              ApprovalHistory[]
-  leaveBalance                   LeaveBalance[]
-  substituteHolidayBalance       SubstituteHolidayBalance[]
-  substituteHolidayGrants        SubstituteHolidayGrant[]   @relation("SubstituteHolidayGrantEmployee")
-  substituteHolidayGrantsGranted SubstituteHolidayGrant[]   @relation("SubstituteHolidayGrantGranter")
-  substituteHolidayGrantsRevoked SubstituteHolidayGrant[]   @relation("SubstituteHolidayGrantRevoker")
-  notifications                  Notification[]
-  rostersClosed                  Roster[]                   @relation("RosterCloser")
-  scheduleEntries                ScheduleEntry[]
-  attendanceRecords              AttendanceRecord[]
+  devices                         UserDevice[]
+  approvalLinesAsApprover         ApprovalLine[]             @relation("ApprovalLineApprover")
+  approvalLinesAsDeputy           ApprovalLine[]             @relation("ApprovalLineDeputy")
+  approvalRequests                ApprovalRequest[]
+  approvalRequestLinesAsApprover  ApprovalRequestLine[]      @relation("ApprovalRequestLineApprover")
+  approvalRequestLinesAsDeputy    ApprovalRequestLine[]      @relation("ApprovalRequestLineDeputy")
+  approvalHistories               ApprovalHistory[]
+  leaveBalance                    LeaveBalance[]
+  substituteHolidayBalance        SubstituteHolidayBalance[]
+  substituteHolidayLedgers        SubstituteHolidayLedger[]  @relation("SubstituteHolidayLedgerEmployee")
+  substituteHolidayLedgersCreated SubstituteHolidayLedger[]  @relation("SubstituteHolidayLedgerCreator")
+  substituteHolidayLedgersAmended SubstituteHolidayLedger[]  @relation("SubstituteHolidayLedgerAmender")
+  substituteHolidayLedgersRevoked SubstituteHolidayLedger[]  @relation("SubstituteHolidayLedgerRevoker")
+  notifications                   Notification[]
+  rostersSubmitted                Roster[]                   @relation("RosterSubmitter")
+  rostersClosed                   Roster[]                   @relation("RosterCloser")
+  scheduleEntries                 ScheduleEntry[]
+  attendanceRecords               AttendanceRecord[]
 
   @@index([facilityId, jobRole, status], name: "idx_emp_facility_role")
+  @@index([teamId], name: "idx_emp_team")
   @@map("employee")
 }
 
@@ -132,18 +165,22 @@ model UserDevice {
 }
 
 model ShiftType {
-  id              BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
-  facilityId      BigInt    @map("facility_id") @db.UnsignedBigInt
-  code            String    @db.VarChar(10)
-  label           String    @db.VarChar(30)
-  startTime       DateTime? @map("start_time") @db.Time(0)
-  endTime         DateTime? @map("end_time") @db.Time(0)
-  breakMinutes    Int       @default(0) @map("break_minutes") @db.UnsignedSmallInt
-  crossesMidnight Boolean   @default(false) @map("crosses_midnight")
-  countsAsWork    Boolean   @default(true) @map("counts_as_work")
-  /// 고시 제12조 인정 근무시간(연차=8.00 등). 유급휴일대체는 §4.4 규칙으로 앱에서 별도 산정 — 본 값은 근로자 관점 표기용
-  recognizedHours Decimal?  @map("recognized_hours") @db.Decimal(4, 2)
-  sortOrder       Int       @default(0) @map("sort_order") @db.UnsignedSmallInt
+  id                BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  facilityId        BigInt    @map("facility_id") @db.UnsignedBigInt
+  code              String    @db.VarChar(10)
+  label             String    @db.VarChar(30)
+  startTime         DateTime? @map("start_time") @db.Time(0)
+  endTime           DateTime? @map("end_time") @db.Time(0)
+  breakMinutes      Int       @default(0) @map("break_minutes") @db.UnsignedSmallInt
+  crossesMidnight   Boolean   @default(false) @map("crosses_midnight")
+  countsAsWork      Boolean   @default(true) @map("counts_as_work")
+  /// [v1.2] §4.1/§4.7 기준근무시간 인정분(분). 주간=480, 야간(주야비)=580(9h40m), 연차=480, 반차=240,
+  /// 유급병가=480, 휴무·결근=0(불인정 — NULL 아닌 0). recognized_hours(DECIMAL)를 대체(정밀도 문제 해소).
+  /// 유급휴일대체는 §4.4 규칙으로 ledger에서 별도 산정 — 본 칼럼 값은 근로자 관점 표기용
+  recognizedMinutes Int?      @map("recognized_minutes") @db.UnsignedSmallInt
+  /// [v1.2] 근무표 셀 표기(§4.7): 주/야/휴/연/오전/오후/유/병/결
+  cellLabel         String?   @map("cell_label") @db.VarChar(10)
+  sortOrder         Int       @default(0) @map("sort_order") @db.UnsignedSmallInt
 
   facility Facility @relation(fields: [facilityId], references: [id])
 
@@ -168,19 +205,31 @@ model PublicHoliday {
 // [Phase 1] 결재 시스템 (개발 1순위)
 // =============================================================
 
+enum ApproverRole {
+  SOCIAL_WORKER
+  OFFICE_MANAGER
+  DIRECTOR
+}
+
 model ApprovalLine {
-  id            BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
-  facilityId    BigInt    @map("facility_id") @db.UnsignedBigInt
-  /// CHECK (step_no IN (1, 2)) — DB 레벨
-  stepNo        Int       @map("step_no") @db.UnsignedTinyInt
-  approverId    BigInt    @map("approver_id") @db.UnsignedBigInt
+  id                BigInt        @id @default(autoincrement()) @db.UnsignedBigInt
+  facilityId        BigInt        @map("facility_id") @db.UnsignedBigInt
+  /// [v1.2] 1~3. 표준: 1=사회복지사, 2=사무국장, 3=시설장. CHECK (step_no BETWEEN 1 AND 3) — DB 레벨
+  stepNo            Int           @map("step_no") @db.UnsignedTinyInt
+  /// [v1.2] 역할 지정 방식. approverId 와 택일(둘 중 하나는 NOT NULL — 앱 레벨)
+  approverRole      ApproverRole? @map("approver_role")
+  /// 개인 지정 방식의 결재자
+  approverId        BigInt?       @map("approver_id") @db.UnsignedBigInt
   /// 대결자(결재자 부재 시 자동 승계)
-  deputyId      BigInt?   @map("deputy_id") @db.UnsignedBigInt
-  effectiveFrom DateTime  @default(now()) @map("effective_from") @db.Date
-  effectiveTo   DateTime? @map("effective_to") @db.Date
+  deputyId          BigInt?       @map("deputy_id") @db.UnsignedBigInt
+  /// [v1.2] 전결 위임(D-13). 대상은 stepNo=2(사무국장)에 한함 —
+  /// ON이면 2단계 승인이 곧 최종 확정(APPROVED). CHECK (delegation_enabled = 0 OR step_no = 2) — DB 레벨
+  delegationEnabled Boolean       @default(false) @map("delegation_enabled")
+  effectiveFrom     DateTime      @default(now()) @map("effective_from") @db.Date
+  effectiveTo       DateTime?     @map("effective_to") @db.Date
 
   facility Facility  @relation(fields: [facilityId], references: [id])
-  approver Employee  @relation("ApprovalLineApprover", fields: [approverId], references: [id])
+  approver Employee? @relation("ApprovalLineApprover", fields: [approverId], references: [id])
   deputy   Employee? @relation("ApprovalLineDeputy", fields: [deputyId], references: [id])
 
   @@unique([facilityId, stepNo, effectiveFrom], map: "uq_line_step")
@@ -206,27 +255,30 @@ enum ApprovalRequestStatus {
 }
 
 model ApprovalRequest {
-  id             BigInt                @id @default(autoincrement()) @db.UnsignedBigInt
-  facilityId     BigInt                @map("facility_id") @db.UnsignedBigInt
-  requesterId    BigInt                @map("requester_id") @db.UnsignedBigInt
-  type           ApprovalRequestType
+  id                  BigInt                @id @default(autoincrement()) @db.UnsignedBigInt
+  facilityId          BigInt                @map("facility_id") @db.UnsignedBigInt
+  requesterId         BigInt                @map("requester_id") @db.UnsignedBigInt
+  type                ApprovalRequestType
   /// SHIFT_CHANGE: 희망 근무유형
-  desiredShiftId BigInt?               @map("desired_shift_id") @db.UnsignedBigInt
-  /// 사유(선택 입력 — 시니어 UX 원칙)
-  reason         String?               @db.VarChar(500)
+  desiredShiftId      BigInt?               @map("desired_shift_id") @db.UnsignedBigInt
+  /// [v1.2] 사유. 연차·반차·유대=선택 / SHIFT_CHANGE=필수(D-14) — NOT NULL 강제는 앱 레벨
+  reason              String?               @db.VarChar(500)
   /// CANCEL 유형이 참조하는 원건
-  refRequestId   BigInt?               @map("ref_request_id") @db.UnsignedBigInt
-  status         ApprovalRequestStatus @default(PENDING)
-  currentStep    Int                   @default(1) @map("current_step") @db.UnsignedTinyInt
+  refRequestId        BigInt?               @map("ref_request_id") @db.UnsignedBigInt
+  status              ApprovalRequestStatus @default(PENDING)
+  /// [v1.2] 완료된 결재 단계 수(§3.4). PENDING=0, INTERIM_APPROVED에서 1 또는 2
+  currentStep         Int                   @default(0) @map("current_step") @db.UnsignedTinyInt
+  /// [v1.2] 전결로 최종 확정된 건(감사 식별 — D-13, 출력 서식에 "전결" 표기)
+  isFinalByDelegation Boolean               @default(false) @map("is_final_by_delegation")
   /// 차감량. 연차=일수, 반차=0.5, 유대=1.0(1일 단위). 조정/취소는 NULL
-  leaveDays      Decimal?              @map("leave_days") @db.Decimal(4, 1)
+  leaveDays           Decimal?              @map("leave_days") @db.Decimal(4, 1)
   /// 사후 신청 라벨(D-3)
-  isRetroactive  Boolean               @default(false) @map("is_retroactive")
+  isRetroactive       Boolean               @default(false) @map("is_retroactive")
   /// 더블탭 중복 제출 방지
-  idempotencyKey String?               @unique(map: "uq_req_idem") @map("idempotency_key") @db.Char(36)
-  createdAt      DateTime              @default(now()) @map("created_at")
+  idempotencyKey      String?               @unique(map: "uq_req_idem") @map("idempotency_key") @db.Char(36)
+  createdAt           DateTime              @default(now()) @map("created_at")
   /// 종결(승인/반려/취소) 시각
-  finalizedAt    DateTime?             @map("finalized_at")
+  finalizedAt         DateTime?             @map("finalized_at")
 
   facility       Facility          @relation(fields: [facilityId], references: [id])
   requester      Employee          @relation(fields: [requesterId], references: [id])
@@ -235,6 +287,7 @@ model ApprovalRequest {
   cancelRequests ApprovalRequest[] @relation("ApprovalRequestCancelOf")
 
   targetDates       ApprovalRequestDate[]
+  requestLines      ApprovalRequestLine[]
   histories         ApprovalHistory[]
   notifications     Notification[]
   scheduleEntries   ScheduleEntry[]       @relation("ScheduleEntrySourceRequest")
@@ -245,7 +298,7 @@ model ApprovalRequest {
   @@map("approval_request")
 }
 
-/// 신청 대상 일자 (연차 다중일 지원. 반차·유대·조정은 1행). v3 target_dates[]의 정규화
+/// 신청 대상 일자 (연차 다중일 지원. 반차·유대·조정은 1행). target_dates[]의 정규화
 model ApprovalRequestDate {
   requestId  BigInt   @map("request_id") @db.UnsignedBigInt
   targetDate DateTime @map("target_date") @db.Date
@@ -255,6 +308,26 @@ model ApprovalRequestDate {
   @@id([requestId, targetDate])
   @@index([targetDate], name: "idx_reqdate_date")
   @@map("approval_request_date")
+}
+
+/// [v1.2 신설] 제출 시점 결재선 스냅샷 (엣지 12 — 설정 중도 변경 비소급).
+/// 자기결재 회피(D-6)로 재배정된 결과를 반영해 저장
+model ApprovalRequestLine {
+  requestId         BigInt  @map("request_id") @db.UnsignedBigInt
+  /// 1~3
+  stepNo            Int     @map("step_no") @db.UnsignedTinyInt
+  /// 제출 시점에 확정된 해당 단계 결재자(역할 지정이면 당시 재직자로 해석·고정)
+  approverId        BigInt  @map("approver_id") @db.UnsignedBigInt
+  deputyId          BigInt? @map("deputy_id") @db.UnsignedBigInt
+  /// 제출 시점 전결 설정(step 2)
+  delegationEnabled Boolean @default(false) @map("delegation_enabled")
+
+  request  ApprovalRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  approver Employee        @relation("ApprovalRequestLineApprover", fields: [approverId], references: [id])
+  deputy   Employee?       @relation("ApprovalRequestLineDeputy", fields: [deputyId], references: [id])
+
+  @@id([requestId, stepNo])
+  @@map("approval_request_line")
 }
 
 enum ApprovalAction {
@@ -273,6 +346,8 @@ model ApprovalHistory {
   action                ApprovalAction
   /// 결재 행위의 단계(제출/취소는 NULL)
   stepNo                Int?           @map("step_no") @db.UnsignedTinyInt
+  /// [v1.2] 이 APPROVE가 전결에 의한 최종 확정임(출력 서식 "전결" 표기 근거)
+  isDelegatedFinal      Boolean        @default(false) @map("is_delegated_final")
   /// REJECT 시 반려사유 — 애플리케이션에서 필수 검증
   comment               String?        @db.VarChar(500)
   /// APPROVE 시점 서명 이미지 사본의 스토리지 경로(key). employee.signaturePath 원본이 아닌 승인 시점 복제본(D-12)
@@ -287,6 +362,7 @@ model ApprovalHistory {
 }
 
 /// 연차 잔여. 음수 허용(엣지케이스 3) — 승인 시 경고는 앱 레벨.
+/// [v1.2] balanceYear = year_basis: 입사일 기준 연차연도의 시작 연도(§3.5, 회계연도 기준 전환은 파일럿 후 보완).
 /// remaining은 DB GENERATED ALWAYS AS (granted - used - reserved) STORED 컬럼 — 앱에서 쓰기 금지, 읽기 전용으로만 사용
 model LeaveBalance {
   employeeId  BigInt   @map("employee_id") @db.UnsignedBigInt
@@ -309,12 +385,13 @@ model LeaveBalance {
   @@map("leave_balance")
 }
 
-/// 유급휴일대체(유대) 잔여 — leave_balance와 동일 구조. 당해 연도 말 소멸, 이월 없음(D-11)
+/// 유대 잔여 — 1일 단위 "사용 트랙"(D-15). leave_balance와 동일 구조. 당해 연도 말 소멸, 이월 없음(D-11)
 model SubstituteHolidayBalance {
   employeeId  BigInt   @map("employee_id") @db.UnsignedBigInt
   /// 발생 연도. 만료 판정(연도 경과분 사용 차단)은 앱/배치 레벨
   balanceYear Int      @map("balance_year") @db.Year
-  /// 부여 합계(1일 단위). Phase 1은 관리자 수동 부여(D-10), Phase 3부터 후보 제시 후 확정
+  /// [v1.2] 부여 합계(1일 단위). substitute_holiday_ledger 행 생성과 1:1 연동(+1) —
+  /// D-15, 대장이 부여의 원천 기록(D-10 개정). 정합성은 앱 레벨
   granted     Decimal  @default(0) @db.Decimal(4, 1)
   used        Decimal  @default(0) @db.Decimal(4, 1)
   reserved    Decimal  @default(0) @db.Decimal(4, 1)
@@ -330,42 +407,84 @@ model SubstituteHolidayBalance {
   @@map("substitute_holiday_balance")
 }
 
-enum SubstituteHolidayGrantSource {
+enum ShiftPeriod {
+  DAY
+  NIGHT
+}
+
+enum SignStatus {
+  NOT_REQUESTED
+  SIGN_REQUESTED
+  SIGNED
+}
+
+enum SubstituteHolidaySource {
   MANUAL
   ATTENDANCE
 }
 
-/// 유대 부여/취소 원장 (부여·정정의 감사 추적 — 엣지 9).
-/// balance.granted는 본 원장의 유효분 합계와 일치해야 함(앱 레벨 정합성)
-model SubstituteHolidayGrant {
-  id            BigInt                       @id @default(autoincrement()) @db.UnsignedBigInt
-  employeeId    BigInt                       @map("employee_id") @db.UnsignedBigInt
-  /// 근무한 법정공휴일
-  workedHoliday DateTime                     @map("worked_holiday") @db.Date
-  days          Decimal                      @default(1.0) @db.Decimal(3, 1)
-  grantedBy     BigInt                       @map("granted_by") @db.UnsignedBigInt
-  grantedAt     DateTime                     @default(now()) @map("granted_at")
-  /// 공휴일 근무 기록 정정 시 부여 취소 관리자
-  revokedBy     BigInt?                      @map("revoked_by") @db.UnsignedBigInt
-  revokedAt     DateTime?                    @map("revoked_at")
-  revokeReason  String?                      @map("revoke_reason") @db.VarChar(300)
-  /// ATTENDANCE = Phase 3 출퇴근 감지 기반 후보 확정분
-  source        SubstituteHolidayGrantSource @default(MANUAL)
+/// [v1.2 신설] 유대 관리대장 — 시간 단위 "공단 인정 트랙"(A-4, D-15). v1.1의 SubstituteHolidayGrant를 대체.
+/// 행 생성 = balance.granted +1 (1:1, 앱 레벨). 근무자 확인 서명 워크플로우 포함(C-4, D-16).
+/// 유효 행 수 = balance.granted (앱 레벨 정합성)
+model SubstituteHolidayLedger {
+  id                            BigInt                  @id @default(autoincrement()) @db.UnsignedBigInt
+  employeeId                    BigInt                  @map("employee_id") @db.UnsignedBigInt
+  /// 근무일(법정공휴일)
+  workedHolidayDate             DateTime                @map("worked_holiday_date") @db.Date
+  workedShift                   ShiftPeriod             @map("worked_shift")
+  /// 사용예정일자(Phase 1 수동 / Phase 2 근무표 연동)
+  plannedUseDate                DateTime?               @map("planned_use_date") @db.Date
+  plannedUseShift               ShiftPeriod?            @map("planned_use_shift")
+  /// 월기준근무시간(h). Phase 1 관리자 수동 기입 / Phase 2 §4.1 산식 자동. 서명 완료분은 재계산하지 않음(비소급 원칙 §4.4)
+  baseMonthlyHours              Decimal?                @map("base_monthly_hours") @db.Decimal(6, 2)
+  /// 실근무시간(h). Phase 1 수동 / Phase 3 GPS 자동
+  actualWorkedHours             Decimal?                @map("actual_worked_hours") @db.Decimal(6, 2)
+  /// 이월가능시간(분). §4.4: clamp(실근무 − 월기준, 0, 480). CHECK (carryable_minutes BETWEEN 0 AND 480) — DB 레벨
+  carryableMinutes              Int                     @default(0) @map("carryable_minutes") @db.UnsignedSmallInt
+  /// 근무자 확인 서명 상태(US-08~09). 7일 미서명 재알림은 배치(엣지 10)
+  signStatus                    SignStatus              @default(NOT_REQUESTED) @map("sign_status")
+  signRequestedAt               DateTime?               @map("sign_requested_at")
+  signedAt                      DateTime?               @map("signed_at")
+  /// 서명 시점 사본(key) — SIGNED 시 필수(앱 레벨). 행 정정 시 무효화(NULL 처리 + 재서명 요청 자동 발송 — 엣지 9)
+  employeeSignatureSnapshotPath String?                 @map("employee_signature_snapshot_path") @db.VarChar(255)
+  /// 기입 관리자(= 유대 1일 부여자)
+  createdBy                     BigInt                  @map("created_by") @db.UnsignedBigInt
+  createdAt                     DateTime                @default(now()) @map("created_at")
+  /// 최근 정정 관리자
+  amendedBy                     BigInt?                 @map("amended_by") @db.UnsignedBigInt
+  amendedAt                     DateTime?               @map("amended_at")
+  /// 정정 사유 — 정정 시 필수(앱 레벨, US-08)
+  amendReason                   String?                 @map("amend_reason") @db.VarChar(300)
+  /// 부여 취소 관리자(공휴일 근무 기록 오류 — 엣지 9)
+  revokedBy                     BigInt?                 @map("revoked_by") @db.UnsignedBigInt
+  revokedAt                     DateTime?               @map("revoked_at")
+  /// 취소 시 balance -1 회수. 이미 사용된 뒤면 회수 대신 경고 표시(앱 레벨)
+  revokeReason                  String?                 @map("revoke_reason") @db.VarChar(300)
+  /// ATTENDANCE = Phase 3 공휴일 근무 감지 후보의 관리자 확정분(D-10)
+  source                        SubstituteHolidaySource @default(MANUAL)
 
-  employee Employee  @relation("SubstituteHolidayGrantEmployee", fields: [employeeId], references: [id])
-  granter  Employee  @relation("SubstituteHolidayGrantGranter", fields: [grantedBy], references: [id])
-  revoker  Employee? @relation("SubstituteHolidayGrantRevoker", fields: [revokedBy], references: [id])
+  employee Employee  @relation("SubstituteHolidayLedgerEmployee", fields: [employeeId], references: [id])
+  creator  Employee  @relation("SubstituteHolidayLedgerCreator", fields: [createdBy], references: [id])
+  amender  Employee? @relation("SubstituteHolidayLedgerAmender", fields: [amendedBy], references: [id])
+  revoker  Employee? @relation("SubstituteHolidayLedgerRevoker", fields: [revokedBy], references: [id])
 
-  @@index([employeeId, workedHoliday], name: "idx_shgrant_emp")
-  @@map("substitute_holiday_grant")
+  notifications Notification[]
+
+  @@unique([employeeId, workedHolidayDate], map: "uq_ledger_emp_day")
+  @@index([signStatus, signRequestedAt], name: "idx_ledger_sign")
+  @@map("substitute_holiday_ledger")
 }
 
 enum NotificationKind {
   NEW_REQUEST
+  STEP_APPROVED
   APPROVED
   REJECTED
   REMINDER
-  EXPIRY_WARNING
+  SIGN_REQUEST
+  LEAVE_EXPIRY_60D
+  LEAVE_EXPIRY_30D
+  SH_EXPIRY
 }
 
 enum NotificationChannel {
@@ -378,15 +497,19 @@ model Notification {
   id          BigInt              @id @default(autoincrement()) @db.UnsignedBigInt
   recipientId BigInt              @map("recipient_id") @db.UnsignedBigInt
   requestId   BigInt?             @map("request_id") @db.UnsignedBigInt
-  /// EXPIRY_WARNING: 유대 당해 연도 소멸 예정(엣지 8, requestId NULL)
+  /// [v1.2] SIGN_REQUEST 등 유대 대장 관련 알림의 참조
+  ledgerId    BigInt?             @map("ledger_id") @db.UnsignedBigInt
+  /// [v1.2] STEP_APPROVED=중간승인 통지(다음 결재자·취소 통지 겸용), SIGN_REQUEST=유대 확인 서명 요청(US-09),
+  /// LEAVE_EXPIRY_60D/30D=연차 소멸 임박 관리자 알림(C-10), SH_EXPIRY=유대 당해 연도 소멸 예정(엣지 8)
   kind        NotificationKind
   channel     NotificationChannel @default(IN_APP)
   body        String              @db.VarChar(300)
   readAt      DateTime?           @map("read_at")
   createdAt   DateTime            @default(now()) @map("created_at")
 
-  recipient Employee         @relation(fields: [recipientId], references: [id])
-  request   ApprovalRequest? @relation(fields: [requestId], references: [id])
+  recipient Employee                 @relation(fields: [recipientId], references: [id])
+  request   ApprovalRequest?         @relation(fields: [requestId], references: [id])
+  ledger    SubstituteHolidayLedger? @relation(fields: [ledgerId], references: [id])
 
   @@index([recipientId, readAt, createdAt], name: "idx_noti_recipient")
   @@map("notification")
@@ -422,6 +545,8 @@ model RegulationParamSet {
   addonRnBonus50     Decimal   @default(0.2) @map("addon_rn_bonus_50") @db.Decimal(3, 1)
   /// §4.4 유대 공단 인정 상한(당월 기준시간 초과분만, 최대 8h)
   subHolidayMaxHours Decimal   @default(8.0) @map("sub_holiday_max_hours") @db.Decimal(3, 1)
+  /// [v1.2] D-9 연차 가산 포함 총 상한 — [V-3 근로기준법 제60조 제4항 원문 대조 후 확정 표기]
+  annualLeaveCapDays Int       @default(25) @map("annual_leave_cap_days") @db.UnsignedTinyInt
   /// 계산식별 반올림/절사 규칙(§4.2 가산=버림, 감액=둘째자리 버림 후 첫째자리 4이하 버림 등)
   roundingRules      Json?     @map("rounding_rules")
 
@@ -443,24 +568,53 @@ model MonthlyCensus {
   @@map("monthly_census")
 }
 
+/// [v1.2 신설] 일별 적정 인원 설정(§4.5 — 팀×주/야 최소·최대, A-6)
+model DailyStaffingRule {
+  id         BigInt      @id @default(autoincrement()) @db.UnsignedBigInt
+  facilityId BigInt      @map("facility_id") @db.UnsignedBigInt
+  /// NULL = 시설 전체 기준
+  teamId     BigInt?     @map("team_id") @db.UnsignedBigInt
+  period     ShiftPeriod
+  minCount   Int         @default(0) @map("min_count") @db.UnsignedTinyInt
+  /// NULL = 상한 없음
+  maxCount   Int?        @map("max_count") @db.UnsignedTinyInt
+
+  facility Facility @relation(fields: [facilityId], references: [id])
+  team     Team?    @relation(fields: [teamId], references: [id])
+
+  @@unique([facilityId, teamId, period], map: "uq_dsr")
+  @@map("daily_staffing_rule")
+}
+
 enum RosterStatus {
   DRAFT
-  CONFIRMED
+  COMPLETED
+  CLOSING_APPROVAL
   CLOSED
 }
 
-/// 월 근무표 헤더. CLOSED 후 수정은 결재 경유
+/// 월 근무표 헤더. [v1.2] 작성중→작성완료→마감결재→마감(§4.8). COMPLETED에서 셀 수정 시 DRAFT 복귀,
+/// 반려 시 DRAFT 복귀 — 전이·로그는 앱 레벨. CLOSED 셀 직접 수정 금지 — 결재 경유로만
 model Roster {
-  id         BigInt       @id @default(autoincrement()) @db.UnsignedBigInt
-  facilityId BigInt       @map("facility_id") @db.UnsignedBigInt
-  yearMonth  String       @map("year_month") @db.Char(7)
-  status     RosterStatus @default(DRAFT)
-  closedAt   DateTime?    @map("closed_at")
-  closedBy   BigInt?      @map("closed_by") @db.UnsignedBigInt
-  createdAt  DateTime     @default(now()) @map("created_at")
+  id               BigInt       @id @default(autoincrement()) @db.UnsignedBigInt
+  facilityId       BigInt       @map("facility_id") @db.UnsignedBigInt
+  yearMonth        String       @map("year_month") @db.Char(7)
+  status           RosterStatus @default(DRAFT)
+  /// [v1.2] 마감 상신자(사회복지사)
+  submittedBy      BigInt?      @map("submitted_by") @db.UnsignedBigInt
+  submittedAt      DateTime?    @map("submitted_at")
+  /// 마감 승인자(사무국장/시설장)
+  closedBy         BigInt?      @map("closed_by") @db.UnsignedBigInt
+  closedAt         DateTime?    @map("closed_at")
+  /// [v1.2] 위반 존재 상태의 강행 마감 여부(D-19)
+  forceClosed      Boolean      @default(false) @map("force_closed")
+  /// [v1.2] 강행 마감 사유 — forceClosed=true 시 필수(앱 레벨). 당시 위반 목록은 ValidationResult 스냅샷으로 보존
+  forceCloseReason String?      @map("force_close_reason") @db.VarChar(500)
+  createdAt        DateTime     @default(now()) @map("created_at")
 
-  facility Facility  @relation(fields: [facilityId], references: [id])
-  closer   Employee? @relation("RosterCloser", fields: [closedBy], references: [id])
+  facility  Facility  @relation(fields: [facilityId], references: [id])
+  submitter Employee? @relation("RosterSubmitter", fields: [submittedBy], references: [id])
+  closer    Employee? @relation("RosterCloser", fields: [closedBy], references: [id])
 
   scheduleEntries   ScheduleEntry[]
   validationResults ValidationResult[]
@@ -484,6 +638,8 @@ model ScheduleEntry {
   shiftTypeId     BigInt              @map("shift_type_id") @db.UnsignedBigInt
   /// APPROVAL = request.approved 이벤트로 자동 반영된 셀(연차·유대·조정)
   source          ScheduleEntrySource @default(MANUAL)
+  /// [v1.2] 가반영 표시(§4.10): step_approved 구독 시 true(글자만), approved 구독 시 false로 확정(셀 색칠)
+  isProvisional   Boolean             @default(false) @map("is_provisional")
   /// 반영 근거 결재 건
   sourceRequestId BigInt?             @map("source_request_id") @db.UnsignedBigInt
 
@@ -577,19 +733,27 @@ enum ValidationSeverity {
   BLOCK
 }
 
-/// 검증 결과 스냅샷 (확정 시점 보존 — 사후 감사 대응)
+enum ValidationSnapshotStage {
+  EDIT
+  COMPLETED
+  CLOSE
+}
+
+/// 검증 결과 스냅샷 (작성완료·마감 시점 보존 — 사후 감사, D-19 강행 마감 근거)
 model ValidationResult {
-  id        BigInt             @id @default(autoincrement()) @db.UnsignedBigInt
-  rosterId  BigInt             @map("roster_id") @db.UnsignedBigInt
-  checkedAt DateTime           @default(now()) @map("checked_at")
+  id            BigInt                  @id @default(autoincrement()) @db.UnsignedBigInt
+  rosterId      BigInt                  @map("roster_id") @db.UnsignedBigInt
+  checkedAt     DateTime                @default(now()) @map("checked_at")
+  /// [v1.2] COMPLETED=작성완료 시 스냅샷(§4.8), CLOSE=마감(강행 포함) 시 위반 목록
+  snapshotStage ValidationSnapshotStage @default(EDIT) @map("snapshot_stage")
   /// 예: MONTHLY_STAFFING_CAREGIVER, NIGHT_ADDON_COND2, BASE_HOURS_SHORTFALL
-  ruleCode  String             @map("rule_code") @db.VarChar(40)
-  severity  ValidationSeverity
+  ruleCode      String                  @map("rule_code") @db.VarChar(40)
+  severity      ValidationSeverity
   /// 환산인원, 필요인원, 미충족 조건 등
-  detail    Json?
+  detail        Json?
 
   roster Roster @relation(fields: [rosterId], references: [id])
 
-  @@index([rosterId, checkedAt], name: "idx_val_roster")
+  @@index([rosterId, snapshotStage, checkedAt], name: "idx_val_roster")
   @@map("validation_result")
 }
