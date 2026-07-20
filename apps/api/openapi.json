@@ -154,6 +154,16 @@
             }
           }
         ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApproveRequestDto"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "",
@@ -686,6 +696,15 @@
           "requestLines",
           "histories"
         ]
+      },
+      "ApproveRequestDto": {
+        "type": "object",
+        "properties": {
+          "delegated": {
+            "type": "boolean",
+            "description": "전결 승인 여부(2차 단계의 결재자·대결자 전용 — D-13)"
+          }
+        }
       },
       "RejectRequestDto": {
         "type": "object",

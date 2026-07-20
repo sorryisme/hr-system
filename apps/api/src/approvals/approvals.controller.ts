@@ -3,6 +3,7 @@ import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { CurrentUser, RequirePermissions } from '../auth/decorators';
 import { SessionUserDto } from '../auth/dto/session-user.dto';
 import { ApprovalsService } from './approvals.service';
+import { ApproveRequestDto } from './dto/approve-request.dto';
 import { InboxQueryDto, InboxStatusFilter } from './dto/inbox-query.dto';
 import { RejectRequestDto } from './dto/reject-request.dto';
 import { RequestDetailDto } from './dto/request-detail.dto';
@@ -39,8 +40,13 @@ export class ApprovalsController {
   approveRequest(
     @Param('id') id: string,
     @CurrentUser() user: SessionUserDto,
+    @Body() body: ApproveRequestDto,
   ): Promise<RequestDetailDto> {
-    return this.approvalsService.approveRequest(id, user.id);
+    return this.approvalsService.approveRequest(
+      id,
+      user.id,
+      body.delegated ?? false,
+    );
   }
 
   @Post(':id/reject')

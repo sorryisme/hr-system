@@ -188,6 +188,50 @@ describe('ApprovalsService 상태머신', () => {
     expect(tx.leaveBalance.update).toHaveBeenCalled();
   });
 
+  it('전결 OFF에서도 2차 결재자가 전결 선택 시 → APPROVED + isFinalByDelegation (D-13)', async () => {
+    tx.approvalRequest.findUnique.mockResolvedValue(
+      transitionRow({ status: 'INTERIM_APPROVED', currentStep: 1 }),
+    );
+
+    await service.approveRequest('1', '2', true);
+
+    expect(tx.approvalRequest.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: containing({
+          status: 'APPROVED',
+          currentStep: 2,
+          isFinalByDelegation: true,
+        }),
+      }),
+    );
+    expect(tx.approvalHistory.create).toHaveBeenCalledWith({
+      data: containing({ isDelegatedFinal: true }),
+    });
+  });
+
+  it('전결 선택은 2차 단계가 아니면 400 DELEGATION_NOT_ALLOWED', async () => {
+    tx.approvalRequest.findUnique.mockResolvedValue(transitionRow());
+
+    await expectHttpCode(
+      service.approveRequest('1', '3', true),
+      BadRequestException,
+      'DELEGATION_NOT_ALLOWED',
+    );
+    expect(tx.approvalRequest.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('상위(3차) 결재자가 2차를 대리 결재할 때 전결 선택 → 400 DELEGATION_NOT_ALLOWED', async () => {
+    tx.approvalRequest.findUnique.mockResolvedValue(
+      transitionRow({ status: 'INTERIM_APPROVED', currentStep: 1 }),
+    );
+
+    await expectHttpCode(
+      service.approveRequest('1', '1', true),
+      BadRequestException,
+      'DELEGATION_NOT_ALLOWED',
+    );
+  });
+
   it('전결 OFF에서 2차 승인 → INTERIM_APPROVED(2), 잔여 미정산', async () => {
     tx.approvalRequest.findUnique.mockResolvedValue(
       transitionRow({ status: 'INTERIM_APPROVED', currentStep: 1 }),
@@ -236,6 +280,34 @@ describe('ApprovalsService 상태머신', () => {
     await service.approveRequest('1', '9');
 
     expect(tx.approvalRequest.updateMany).toHaveBeenCalled();
+  });
+
+  it('상위 단계 결재자는 하위 단계를 결재할 수 있다(3차 결재자의 1차 승인)', async () => {
+    tx.approvalRequest.findUnique.mockResolvedValue(transitionRow());
+
+    await service.approveRequest('1', '1');
+
+    expect(tx.approvalRequest.updateMany).toHaveBeenCalledWith({
+      where: { id: 1n, status: 'PENDING', currentStep: 0 },
+      data: { status: 'INTERIM_APPROVED', currentStep: 1 },
+    });
+    expect(tx.approvalHistory.create).toHaveBeenCalledWith({
+      data: containing({ action: 'APPROVE', stepNo: 1 }),
+    });
+  });
+
+  it('상위 단계의 대결자는 하위 결재 불가 — 409 NOT_YOUR_STEP', async () => {
+    tx.approvalRequest.findUnique.mockResolvedValue(
+      transitionRow({
+        requestLines: [line(1, 3n), line(2, 2n, 9n), line(3, 1n)],
+      }),
+    );
+
+    await expectHttpCode(
+      service.approveRequest('1', '9'),
+      ConflictException,
+      'NOT_YOUR_STEP',
+    );
   });
 
   it('현재 단계 결재자/대결자가 아니면 409 NOT_YOUR_STEP, 전이 없음', async () => {

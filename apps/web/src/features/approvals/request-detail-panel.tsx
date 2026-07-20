@@ -70,17 +70,35 @@ function RequestDetailContent({ requestId }: { requestId: string }) {
   const pending = approveMutation.isPending || rejectMutation.isPending
 
   // 결재자 = 로그인 사용자(서버도 JWT 세션으로 동일하게 식별·검증 — D-6, NOT_YOUR_STEP).
-  // 현재 단계의 결재자/대결자가 아니면 버튼을 비활성화해 불필요한 409를 예방한다
+  // 현재 단계의 결재자/대결자 또는 상위 단계 결재자(하위 결재 허용: 2차→1차, 3차→1·2차)가
+  // 아니면 버튼을 비활성화해 불필요한 409를 예방한다
   const user = getSessionUser()
   const currentLine = detail?.requestLines.find((l) => l.stepNo === detail.currentStep + 1)
   const isMyTurn =
     !!user &&
+    !!detail &&
     !!currentLine &&
-    user.id !== detail?.requester.id &&
-    (currentLine.approver.id === user.id || currentLine.deputy?.id === user.id)
+    user.id !== detail.requester.id &&
+    (currentLine.approver.id === user.id ||
+      currentLine.deputy?.id === user.id ||
+      detail.requestLines.some(
+        (l) => l.stepNo > currentLine.stepNo && l.approver.id === user.id,
+      ))
 
   const isOpen = detail?.status === 'PENDING' || detail?.status === 'INTERIM_APPROVED'
   const rejectHistory = detail?.histories.find((h) => h.action === 'REJECT')
+
+  // 임의 전결(D-13): 2차 단계의 결재자/대결자 본인만 선택 가능(서버 동일 검증).
+  // 스냅샷 delegation ON이면 일반 승인이 이미 전결 확정이라 별도 버튼 불필요
+  const canDelegate =
+    isMyTurn &&
+    !!user &&
+    !!detail &&
+    !!currentLine &&
+    currentLine.stepNo === 2 &&
+    detail.totalSteps > 2 &&
+    !currentLine.delegationEnabled &&
+    (currentLine.approver.id === user.id || currentLine.deputy?.id === user.id)
 
   return (
     <aside className="w-[460px] shrink-0 overflow-y-auto border-l bg-card">
@@ -166,7 +184,8 @@ function RequestDetailContent({ requestId }: { requestId: string }) {
 
               {!isMyTurn && (
                 <div className="rounded-xl border bg-paper px-4 py-3 text-sm text-muted-foreground">
-                  현재 로그인 계정은 이 단계의 결재자/대결자가 아니어서 처리할 수 없습니다.
+                  현재 로그인 계정은 이 단계를 결재할 권한이 없습니다(해당 단계
+                  결재자·대결자 또는 상위 단계 결재자만 가능).
                 </div>
               )}
 
@@ -179,22 +198,39 @@ function RequestDetailContent({ requestId }: { requestId: string }) {
                   }}
                 />
               ) : (
-                <div className="flex gap-2.5">
-                  <Button
-                    variant="outline"
-                    className="h-11 flex-1 border-reject text-reject hover:bg-reject/5 hover:text-reject"
-                    disabled={pending || !isMyTurn}
-                    onClick={() => setRejecting(true)}
-                  >
-                    반려
-                  </Button>
-                  <Button
-                    className="h-11 flex-1 bg-approve text-approve-foreground hover:bg-approve/90"
-                    disabled={pending || !isMyTurn}
-                    onClick={() => approveMutation.mutate({ id: requestId })}
-                  >
-                    {pending ? '처리 중…' : '승인'}
-                  </Button>
+                <div className="flex flex-col gap-2.5">
+                  <div className="flex gap-2.5">
+                    <Button
+                      variant="outline"
+                      className="h-11 flex-1 border-reject text-reject hover:bg-reject/5 hover:text-reject"
+                      disabled={pending || !isMyTurn}
+                      onClick={() => setRejecting(true)}
+                    >
+                      반려
+                    </Button>
+                    <Button
+                      className="h-11 flex-1 bg-approve text-approve-foreground hover:bg-approve/90"
+                      disabled={pending || !isMyTurn}
+                      onClick={() => approveMutation.mutate({ id: requestId, data: {} })}
+                    >
+                      {pending ? '처리 중…' : '승인'}
+                    </Button>
+                  </div>
+                  {canDelegate && (
+                    <Button
+                      variant="outline"
+                      className="h-11 w-full border-brand text-brand hover:bg-brand/5 hover:text-brand"
+                      disabled={pending}
+                      onClick={() =>
+                        approveMutation.mutate({
+                          id: requestId,
+                          data: { delegated: true },
+                        })
+                      }
+                    >
+                      전결 승인 — 이후 단계 생략 (D-13)
+                    </Button>
+                  )}
                 </div>
               )}
             </div>
