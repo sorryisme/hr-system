@@ -154,16 +154,6 @@
             }
           }
         ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ApproveRequestDto"
-              }
-            }
-          }
-        },
         "responses": {
           "200": {
             "description": "",
@@ -697,27 +687,9 @@
           "histories"
         ]
       },
-      "ApproveRequestDto": {
-        "type": "object",
-        "properties": {
-          "approverId": {
-            "type": "string",
-            "example": "3",
-            "description": "결재자 employee id"
-          }
-        },
-        "required": [
-          "approverId"
-        ]
-      },
       "RejectRequestDto": {
         "type": "object",
         "properties": {
-          "approverId": {
-            "type": "string",
-            "example": "3",
-            "description": "결재자 employee id"
-          },
           "comment": {
             "type": "string",
             "maxLength": 500,
@@ -725,7 +697,6 @@
           }
         },
         "required": [
-          "approverId",
           "comment"
         ]
       }

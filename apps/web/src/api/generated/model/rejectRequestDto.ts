@@ -6,8 +6,6 @@
  */
 
 export interface RejectRequestDto {
-  /** 결재자 employee id */
-  approverId: string;
   /**
      * 반려 사유(필수)
      * @maxLength 500

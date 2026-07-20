@@ -8,7 +8,6 @@
 export * from './approvalAction';
 export * from './approvalRequestStatus';
 export * from './approvalRequestType';
-export * from './approveRequestDto';
 export * from './employeeSummaryDto';
 export * from './historyEntryDto';
 export * from './inboxCountsDto';

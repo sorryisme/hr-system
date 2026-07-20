@@ -24,7 +24,6 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
-  ApproveRequestDto,
   ListRequestsParams,
   LoginRequestDto,
   RejectRequestDto,
@@ -662,15 +661,14 @@ export const getApproveRequestUrl = (id: string,) => {
   return `/api/requests/${id}/approve`
 }
 
-export const approveRequest = async (id: string,
-    approveRequestDto: ApproveRequestDto, options?: RequestInit): Promise<approveRequestResponse> => {
+export const approveRequest = async (id: string, options?: RequestInit): Promise<approveRequestResponse> => {
 
   return customFetch<approveRequestResponse>(getApproveRequestUrl(id),
   {
     ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(approveRequestDto)
+    method: 'POST'
+
+
   }
 );}
 
@@ -679,8 +677,8 @@ export const approveRequest = async (id: string,
 
 
 export const getApproveRequestMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof approveRequest>>, TError,{id: string;data: ApproveRequestDto}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof approveRequest>>, TError,{id: string;data: ApproveRequestDto}, TContext> => {
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof approveRequest>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof approveRequest>>, TError,{id: string}, TContext> => {
 
 const mutationKey = ['approveRequest'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
@@ -692,10 +690,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof approveRequest>>, {id: string;data: ApproveRequestDto}> = (props) => {
-          const {id,data} = props ?? {};
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof approveRequest>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
 
-          return  approveRequest(id,data,requestOptions)
+          return  approveRequest(id,requestOptions)
         }
 
 
@@ -706,15 +704,15 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type ApproveRequestMutationResult = NonNullable<Awaited<ReturnType<typeof approveRequest>>>
-    export type ApproveRequestMutationBody = ApproveRequestDto
+
     export type ApproveRequestMutationError = unknown
 
     export const useApproveRequest = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof approveRequest>>, TError,{id: string;data: ApproveRequestDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof approveRequest>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof approveRequest>>,
         TError,
-        {id: string;data: ApproveRequestDto},
+        {id: string},
         TContext
       > => {
       return useMutation(getApproveRequestMutationOptions(options), queryClient);

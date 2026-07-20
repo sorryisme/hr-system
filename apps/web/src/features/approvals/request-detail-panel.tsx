@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import {
   getGetRequestQueryKey,
@@ -7,16 +7,9 @@ import {
   useGetRequest,
   useRejectRequest,
 } from '@/api/generated/endpoints'
-import type { EmployeeSummaryDto, RequestDetailDto } from '@/api/generated/model'
 import { ApiError } from '@/api/mutator'
 import { Button } from '@/components/ui/button'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+import { getSessionUser } from '@/features/auth/session'
 import { StatusBadge, TypeBadge } from './badges'
 import { ApprovalStepper } from './approval-stepper'
 import { RejectForm } from './reject-form'
@@ -30,35 +23,6 @@ import {
 function errorMessage(error: unknown): string {
   if (error instanceof ApiError) return error.message
   return '요청 처리에 실패했습니다. 잠시 후 다시 시도해 주세요.'
-}
-
-/**
- * 스냅샷 결재선의 결재자·대결자 후보(중복 제거). 인증 미도입 보완 — "결재자로 실행" 셀렉트의 소스.
- * 같은 사람이 여러 단계에 걸쳐 있으면(예: 1차 대결자 = 2차 결재자) 현재 대기 중인 단계의
- * 역할로 라벨을 표시한다 — 그렇지 않으면 지금 승인 대상이 아닌 과거/미래 단계 역할이 표시돼 혼동을 준다.
- */
-function actorOptions(detail: RequestDetailDto) {
-  const currentStepNo = detail.currentStep + 1
-  const byId = new Map<
-    string,
-    { id: string; name: string; jobRole: EmployeeSummaryDto['jobRole']; stepNo: number; role: string }
-  >()
-  for (const line of detail.requestLines) {
-    for (const [person, role] of [
-      [line.approver, '결재자'],
-      [line.deputy, '대결자'],
-    ] as const) {
-      if (!person) continue
-      const existing = byId.get(person.id)
-      if (!existing || (existing.stepNo !== currentStepNo && line.stepNo === currentStepNo)) {
-        byId.set(person.id, { id: person.id, name: person.name, jobRole: person.jobRole, stepNo: line.stepNo, role })
-      }
-    }
-  }
-  return [...byId.values()].map((p) => ({
-    id: p.id,
-    label: `${p.name} ${JOB_ROLE_LABELS[p.jobRole]} (${p.stepNo}차 ${p.role})`,
-  }))
 }
 
 export function RequestDetailPanel({ requestId }: { requestId: string | null }) {
@@ -79,7 +43,6 @@ function RequestDetailContent({ requestId }: { requestId: string }) {
   const detailQuery = useGetRequest(requestId)
   const detail = detailQuery.data?.data
 
-  const [actorId, setActorId] = useState<string | null>(null)
   const [rejecting, setRejecting] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
 
@@ -106,9 +69,15 @@ function RequestDetailContent({ requestId }: { requestId: string }) {
   const rejectMutation = useRejectRequest({ mutation: mutationOptions })
   const pending = approveMutation.isPending || rejectMutation.isPending
 
-  const options = useMemo(() => (detail ? actorOptions(detail) : []), [detail])
+  // 결재자 = 로그인 사용자(서버도 JWT 세션으로 동일하게 식별·검증 — D-6, NOT_YOUR_STEP).
+  // 현재 단계의 결재자/대결자가 아니면 버튼을 비활성화해 불필요한 409를 예방한다
+  const user = getSessionUser()
   const currentLine = detail?.requestLines.find((l) => l.stepNo === detail.currentStep + 1)
-  const selectedActor = actorId ?? currentLine?.approver.id ?? null
+  const isMyTurn =
+    !!user &&
+    !!currentLine &&
+    user.id !== detail?.requester.id &&
+    (currentLine.approver.id === user.id || currentLine.deputy?.id === user.id)
 
   const isOpen = detail?.status === 'PENDING' || detail?.status === 'INTERIM_APPROVED'
   const rejectHistory = detail?.histories.find((h) => h.action === 'REJECT')
@@ -188,36 +157,25 @@ function RequestDetailContent({ requestId }: { requestId: string }) {
 
           {isOpen && (
             <div className="flex flex-col gap-3 border-t pt-4">
-              <div className="flex items-center gap-2">
-                <span className="shrink-0 text-[13px] text-muted-foreground">결재자로 실행</span>
-                <Select
-                  items={Object.fromEntries(options.map((o) => [o.id, o.label]))}
-                  value={selectedActor ?? undefined}
-                  onValueChange={(v) => setActorId(v)}
-                >
-                  <SelectTrigger className="flex-1">
-                    <SelectValue placeholder="결재자 선택" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {options.map((o) => (
-                      <SelectItem key={o.id} value={o.id}>
-                        {o.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div className="flex justify-between text-[13px]">
+                <span className="text-muted-foreground">결재자</span>
+                <span className="font-semibold">
+                  {user ? `${user.name} ${JOB_ROLE_LABELS[user.jobRole]}` : '(로그인 필요)'}
+                </span>
               </div>
+
+              {!isMyTurn && (
+                <div className="rounded-xl border bg-paper px-4 py-3 text-sm text-muted-foreground">
+                  현재 로그인 계정은 이 단계의 결재자/대결자가 아니어서 처리할 수 없습니다.
+                </div>
+              )}
 
               {rejecting ? (
                 <RejectForm
                   pending={pending}
                   onCancel={() => setRejecting(false)}
                   onConfirm={(comment) => {
-                    if (!selectedActor) return
-                    rejectMutation.mutate({
-                      id: requestId,
-                      data: { approverId: selectedActor, comment },
-                    })
+                    rejectMutation.mutate({ id: requestId, data: { comment } })
                   }}
                 />
               ) : (
@@ -225,21 +183,15 @@ function RequestDetailContent({ requestId }: { requestId: string }) {
                   <Button
                     variant="outline"
                     className="h-11 flex-1 border-reject text-reject hover:bg-reject/5 hover:text-reject"
-                    disabled={pending || !selectedActor}
+                    disabled={pending || !isMyTurn}
                     onClick={() => setRejecting(true)}
                   >
                     반려
                   </Button>
                   <Button
                     className="h-11 flex-1 bg-approve text-approve-foreground hover:bg-approve/90"
-                    disabled={pending || !selectedActor}
-                    onClick={() => {
-                      if (!selectedActor) return
-                      approveMutation.mutate({
-                        id: requestId,
-                        data: { approverId: selectedActor },
-                      })
-                    }}
+                    disabled={pending || !isMyTurn}
+                    onClick={() => approveMutation.mutate({ id: requestId })}
                   >
                     {pending ? '처리 중…' : '승인'}
                   </Button>
