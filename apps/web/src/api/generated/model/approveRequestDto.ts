@@ -6,6 +6,6 @@
  */
 
 export interface ApproveRequestDto {
-  /** 결재자 employee id */
-  approverId: string;
+  /** 전결 승인 여부(2차 단계의 결재자·대결자 전용 — D-13) */
+  delegated?: boolean;
 }

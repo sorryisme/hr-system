@@ -118,21 +118,29 @@ export class ApprovalsService {
   async approveRequest(
     id: string,
     approverId: string,
+    delegated = false,
   ): Promise<RequestDetailDto> {
     const requestId = this.parseId(id);
     const actorId = this.parseId(approverId);
 
     return this.prisma.$transaction(async (tx) => {
       const req = await this.loadForTransition(tx, requestId);
-      const { line, nextStepNo, totalSteps } = this.resolveCurrentStep(
-        req,
-        actorId,
-      );
+      const { line, nextStepNo, totalSteps, isCurrentAssignee } =
+        this.resolveCurrentStep(req, actorId);
 
-      // 전결(D-13): step 2 승인 시 delegation ON이면 곧 최종 확정
+      // 임의 전결(D-13): 결재 시점 선택은 2차 단계의 결재자·대결자 본인만 가능
+      // (상위 결재자의 하위 대리 결재에는 전결 옵션을 허용하지 않는다)
+      if (delegated && (nextStepNo !== 2 || !isCurrentAssignee)) {
+        throw new BadRequestException({
+          code: 'DELEGATION_NOT_ALLOWED',
+          message: '전결은 2차 결재 단계의 결재자·대결자만 사용할 수 있습니다.',
+        });
+      }
+
+      // 전결(D-13): step 2 승인 시 스냅샷 delegation ON이거나 결재자가 전결을 선택하면 최종 확정
       const isFinal =
         nextStepNo === totalSteps ||
-        (nextStepNo === 2 && line.delegationEnabled);
+        (nextStepNo === 2 && (line.delegationEnabled || delegated));
       const isDelegated = isFinal && nextStepNo < totalSteps;
 
       // 낙관적 가드(엣지 1 — 동시 결재 경합): 읽은 시점의 status/currentStep 조건부 전이
@@ -279,14 +287,21 @@ export class ApprovalsService {
         '자기결재는 금지되어 있습니다(D-6).',
       );
     }
-    if (line.approverId !== actorId && line.deputyId !== actorId) {
+    // 하위 결재 허용: 현재 단계의 결재자/대결자 외에 상위 단계 결재자도
+    // 하위 단계를 대신 결재할 수 있다(예: 2차→1차, 3차→1·2차)
+    const isCurrentAssignee =
+      line.approverId === actorId || line.deputyId === actorId;
+    const isHigherApprover = req.requestLines.some(
+      (l) => l.stepNo > nextStepNo && l.approverId === actorId,
+    );
+    if (!isCurrentAssignee && !isHigherApprover) {
       throw this.conflict(
         'NOT_YOUR_STEP',
-        '현재 단계의 결재자 또는 대결자가 아닙니다.',
+        '현재 단계의 결재자·대결자 또는 상위 단계 결재자가 아닙니다.',
       );
     }
     const totalSteps = Math.max(...req.requestLines.map((l) => l.stepNo));
-    return { line, nextStepNo, totalSteps };
+    return { line, nextStepNo, totalSteps, isCurrentAssignee };
   }
 
   /// 최종 승인/반려 시 잔여 정산. remaining은 DB GENERATED — 절대 쓰지 않는다
@@ -403,7 +418,7 @@ export class ApprovalsService {
     const messages: Record<string, string> = {
       ALREADY_FINALIZED:
         '이미 종결되었거나 다른 결재자가 먼저 처리한 건입니다.',
-      NOT_YOUR_STEP: '현재 단계의 결재자가 아닙니다.',
+      NOT_YOUR_STEP: '현재 단계를 결재할 권한이 없습니다.',
       SELF_APPROVAL_FORBIDDEN: '자기결재는 금지되어 있습니다.',
     };
     return new ConflictException({

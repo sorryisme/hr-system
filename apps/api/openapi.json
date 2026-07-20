@@ -700,24 +700,15 @@
       "ApproveRequestDto": {
         "type": "object",
         "properties": {
-          "approverId": {
-            "type": "string",
-            "example": "3",
-            "description": "결재자 employee id"
+          "delegated": {
+            "type": "boolean",
+            "description": "전결 승인 여부(2차 단계의 결재자·대결자 전용 — D-13)"
           }
-        },
-        "required": [
-          "approverId"
-        ]
+        }
       },
       "RejectRequestDto": {
         "type": "object",
         "properties": {
-          "approverId": {
-            "type": "string",
-            "example": "3",
-            "description": "결재자 employee id"
-          },
           "comment": {
             "type": "string",
             "maxLength": 500,
@@ -725,7 +716,6 @@
           }
         },
         "required": [
-          "approverId",
           "comment"
         ]
       }
