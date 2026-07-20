@@ -2,6 +2,8 @@ import { useState, type FormEvent } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { useLogin } from '@/api/generated/endpoints'
 import { ApiError } from '@/api/mutator'
+import logoSymbol from '@/assets/logo-symbol.png'
+import logoWordmark from '@/assets/logo-wordmark.png'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
@@ -10,7 +12,6 @@ import {
   CardDescription,
   CardFooter,
   CardHeader,
-  CardTitle,
 } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -54,8 +55,9 @@ export function LoginPage() {
   return (
     <div className="flex min-h-svh items-center justify-center bg-muted/40 px-4">
       <Card className="w-full max-w-[380px]">
-        <CardHeader>
-          <CardTitle className="font-heading text-xl">CareShift</CardTitle>
+        <CardHeader className="justify-items-center gap-3 text-center">
+          <img src={logoSymbol} alt="" className="size-14" />
+          <img src={logoWordmark} alt="늘봄실버타운요양원" className="h-9 w-auto" />
           <CardDescription>요양원 근태관리 시스템 관리자 로그인</CardDescription>
         </CardHeader>
 
