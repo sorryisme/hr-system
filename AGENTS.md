@@ -61,4 +61,5 @@ care/
 ## General
 - any 금지. eslint-disable은 사유 필수.
 - NestJS v12, TypeScript 6.0, Prisma Next 등 메이저 업그레이드는 사람 승인 없이 수행하지 않는다.
-- 지시한 코드 작업 이후 산출물을 작성하여 DOCS에 추가한다. 산출물 작성 시 docs/logs/{날짜}-{작업제목}.md 형태로 저장한다.
+- 지시한 코드 작업 이후 산출물을 작성하여 DOCS에 추가한다. 산출물 작성 시 docs/logs/{년월일}/{yyyy-MM-dd}-{작업제목}.md 형태로 저장한다.
+- 브랜치명은 feat{num}/{name}, fix/{num}/name 같은 구조로 작성하며 num은 가장 최근 브랜치 num의 + 1 한다.
