@@ -244,5 +244,8 @@ ALTER TABLE validation_result
     COMMENT '[v1.2] COMPLETED=작성완료 시 스냅샷(§4.8), CLOSE=마감(강행 포함) 시 위반 목록'
     AFTER checked_at;
 
-ALTER TABLE validation_result DROP INDEX idx_val_roster;
-ALTER TABLE validation_result ADD KEY idx_val_roster (roster_id, snapshot_stage, checked_at);
+-- FK(fk가 roster_id 인덱스를 요구)로 인해 DROP을 단독 실행하면 MySQL 1553 발생.
+-- 하나의 ALTER에서 드롭+추가를 동시에 수행해 최종 상태(roster_id 선두 인덱스 유지)로 평가되게 한다.
+ALTER TABLE validation_result
+  DROP INDEX idx_val_roster,
+  ADD KEY idx_val_roster (roster_id, snapshot_stage, checked_at);
