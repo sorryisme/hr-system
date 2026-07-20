@@ -1,6 +1,7 @@
 import { Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router'
 import { LogOut } from 'lucide-react'
 import { logout } from '@/api/generated/endpoints'
+import logoWordmark from '@/assets/logo-wordmark.png'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { getSessionUser, setSessionUser } from '@/features/auth/session'
@@ -42,7 +43,9 @@ export function AppShell() {
   return (
     <div className="flex min-h-svh bg-background font-sans text-foreground">
       <aside className="flex w-[220px] shrink-0 flex-col gap-1 border-r border-sidebar-border bg-sidebar p-3">
-        <div className="px-2.5 pb-5 font-heading text-lg font-bold">CareShift</div>
+        <div className="px-2.5 pb-5">
+          <img src={logoWordmark} alt="늘봄실버타운요양원" className="h-10 w-auto" />
+        </div>
 
         <Link
           to="/dashboard"
@@ -80,7 +83,7 @@ export function AppShell() {
           <div className="font-heading text-lg font-semibold">{title}</div>
           <div className="flex items-center gap-4">
             <div className="font-mono text-[13px] text-muted-foreground">
-              해피케어 주간보호센터 · 2026.07.19
+              늘봄실버타운요양원 · 2026.07.19
             </div>
             {user && (
               <div className="flex items-center gap-2">
