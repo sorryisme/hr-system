@@ -13,13 +13,22 @@ care/
 │  │     ├─ app.module.ts / app.controller.ts / app.service.ts
 │  │     └─ app.controller.spec.ts
 │  │     # 도메인 모듈·DB 계층(Prisma)·인증(JWT/RBAC) 미구현 — 기본 스캐폴드만 존재
-│  └─ web/                     # Vite 8 + React 19
-│     └─ src/
+│  ├─ web/                     # Vite 8 + React 19 — 관리자 웹(데스크톱)
+│  │  └─ src/
+│  │     ├─ routes/             # TanStack Router 파일기반 라우팅 (__root.tsx, index.tsx)
+│  │     ├─ routeTree.gen.ts    # 자동 생성물 — 수정 금지
+│  │     ├─ components/
+│  │     │  ├─ ui/              # shadcn 프리미티브 (button, input, label, table, dialog, dropdown-menu)
+│  │     │  └─ shared/          # 공통 컴포넌트 — 현재 디렉터리만 존재(.gitkeep), 구현 없음
+│  │     ├─ features/           # 도메인별 컴포넌트 — 현재 디렉터리만 존재(.gitkeep), 구현 없음
+│  │     └─ lib/utils.ts        # shadcn cn() 헬퍼
+│  └─ mobile/                  # Vite 8 + React 19 — 종사자 모바일 웹뷰(휴가 신청, 시니어 친화 UI)
+│     └─ src/                   # apps/web과 동일 스택·컨벤션. 스캐폴드만 존재, 기능 미구현
 │        ├─ routes/             # TanStack Router 파일기반 라우팅 (__root.tsx, index.tsx)
 │        ├─ routeTree.gen.ts    # 자동 생성물 — 수정 금지
 │        ├─ components/
-│        │  ├─ ui/              # shadcn 프리미티브 (button, input, label, table, dialog, dropdown-menu)
-│        │  └─ shared/          # 공통 컴포넌트 — 현재 디렉터리만 존재(.gitkeep), 구현 없음
+│        │  ├─ ui/              # shadcn 프리미티브 — 아직 없음(.gitkeep), 필요 시 shadcn CLI로 추가
+│        │  └─ shared/          # mobile-shell.tsx(루트 레이아웃)만 존재
 │        ├─ features/           # 도메인별 컴포넌트 — 현재 디렉터리만 존재(.gitkeep), 구현 없음
 │        └─ lib/utils.ts        # shadcn cn() 헬퍼
 └─ docs/
@@ -30,7 +39,7 @@ care/
    └─ {날짜}-{작업제목}.md                       # 코드 작업 산출물 (General 규칙에 따라 생성)
 ```
 
-- Orval 연동(OpenAPI → 프론트 타입)은 apps/web에 실제 API 클라이언트가 필요해지는 시점에 구성한다. 그 전까지 apps/web은 백엔드를 호출하지 않는다.
+- Orval 연동(OpenAPI → 프론트 타입)은 각 프론트(apps/web, apps/mobile)에 실제 API 클라이언트가 필요해지는 시점에 구성한다. 그 전까지는 백엔드를 호출하지 않는다.
 - `apps/web/src/components/shared`, `apps/web/src/features`에 실제 구현(DataTable/FormField/PageLayout/ConfirmDialog 등)을 추가할 때는 이 구조를 유지한다.
 
 ## Architecture
@@ -39,7 +48,8 @@ care/
 - API 타입은 Orval 생성물만 사용한다. generated 디렉터리·routeTree.gen.ts 수정 금지.
 
 ## Frontend
-- React(apps/web) 작업 시 `.claude/skills/react-best-practices` 참고.
+- React(apps/web, apps/mobile) 작업 시 `.claude/skills/react-best-practices` 참고.
+- apps/mobile은 apps/web과 동일한 스택·컨벤션(Tailwind+cva+cn, shadcn CLI, TanStack Router/Query)을 따르는 별도 앱이다. 종사자 대상 웹뷰이므로 시니어 친화 UI 기준(큰 글씨, 고대비, 화면당 1과업 — docs/plan 참고)을 적용한다.
 - UI 프리미티브는 shadcn CLI로만 추가하고 components/ui 중복 구현 금지.
 - Tailwind + cva + cn만 사용. 다른 스타일링 방식·UI 라이브러리 금지.
 - 디자인 토큰 외 임의 색상값(arbitrary value) 금지.

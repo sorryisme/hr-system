@@ -9,8 +9,10 @@ build/
 coverage/
 .turbo/
 apps/web/.vite/
+apps/mobile/.vite/
 apps/api/dist/
 
 # generated code — do not hand-edit
 apps/web/src/routeTree.gen.ts
+apps/mobile/src/routeTree.gen.ts
 .playwright-mcp
