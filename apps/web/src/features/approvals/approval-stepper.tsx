@@ -41,36 +41,40 @@ export function ApprovalStepper({ detail }: { detail: RequestDetailDto }) {
         {detail.requestLines.map((line, i) => {
           const state = stepState(detail, line.stepNo)
           return (
-            <div key={line.stepNo} className="flex flex-1 items-start">
+            <div
+              key={line.stepNo}
+              className="relative flex flex-1 flex-col items-center gap-1.5 px-1"
+            >
+              {/* 연결선: 이전 단계 dot 중심 ↔ 현재 dot 중심 (칼럼 폭 균등 전제) */}
               {i > 0 && (
-                <div
-                  className={cn(
-                    'mt-2 h-0.5 flex-1',
-                    line.stepNo <= detail.currentStep ? 'bg-approve' : 'bg-border',
-                  )}
-                />
+                <div className="absolute right-1/2 top-0 flex h-4 w-full items-center">
+                  <div
+                    className={cn(
+                      'h-0.5 w-full',
+                      line.stepNo <= detail.currentStep ? 'bg-approve' : 'bg-border',
+                    )}
+                  />
+                </div>
               )}
-              <div className="flex flex-col items-center gap-1.5 px-1">
-                <div className={cn('size-4 rounded-full border', DOT_STYLES[state])} />
-                <div className="text-center text-xs font-bold leading-tight">
-                  {line.stepNo}차
-                  <br />
-                  {JOB_ROLE_LABELS[line.approver.jobRole]}
-                </div>
-                <div
-                  className={cn(
-                    'text-xs',
-                    state === 'done' && 'text-approve',
-                    state === 'rejected' && 'text-reject',
-                    state === 'current' && 'font-bold text-brand',
-                    (state === 'upcoming' || state === 'skipped') && 'text-muted-foreground',
-                  )}
-                >
-                  {STATE_LABELS[state]}
-                  {line.stepNo === 2 && line.delegationEnabled && state !== 'skipped' && (
-                    <span className="ml-1 text-brand">(전결)</span>
-                  )}
-                </div>
+              <div className={cn('relative size-4 rounded-full border', DOT_STYLES[state])} />
+              <div className="text-center text-xs font-bold leading-tight">
+                {line.stepNo}차
+                <br />
+                {JOB_ROLE_LABELS[line.approver.jobRole]}
+              </div>
+              <div
+                className={cn(
+                  'text-xs',
+                  state === 'done' && 'text-approve',
+                  state === 'rejected' && 'text-reject',
+                  state === 'current' && 'font-bold text-brand',
+                  (state === 'upcoming' || state === 'skipped') && 'text-muted-foreground',
+                )}
+              >
+                {STATE_LABELS[state]}
+                {line.stepNo === 2 && line.delegationEnabled && state !== 'skipped' && (
+                  <span className="ml-1 text-brand">(전결)</span>
+                )}
               </div>
             </div>
           )
