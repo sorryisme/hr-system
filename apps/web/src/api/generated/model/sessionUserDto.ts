@@ -10,7 +10,8 @@ import type { SystemRole } from './systemRole';
 export interface SessionUserDto {
   id: string;
   name: string;
-  email: string;
+  /** @nullable */
+  email: string | null;
   jobRole: JobRole;
   systemRole: SystemRole;
   facilityId: string;

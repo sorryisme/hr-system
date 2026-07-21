@@ -27,6 +27,7 @@ import type {
   ApproveRequestDto,
   ListRequestsParams,
   LoginRequestDto,
+  RegisterDeviceDto,
   RejectRequestDto,
   RequestDetailDto,
   RequestListResponseDto,
@@ -796,4 +797,81 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getRejectRequestMutationOptions(options), queryClient);
+    }
+
+export type registerResponse200 = {
+  data: SessionUserDto
+  status: 200
+}
+
+export type registerResponseSuccess = (registerResponse200) & {
+  headers: Headers;
+};
+;
+
+export type registerResponse = (registerResponseSuccess)
+
+export const getRegisterUrl = () => {
+
+
+
+
+  return `/api/devices/register`
+}
+
+export const register = async (registerDeviceDto: RegisterDeviceDto, options?: RequestInit): Promise<registerResponse> => {
+
+  return customFetch<registerResponse>(getRegisterUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(registerDeviceDto)
+  }
+);}
+
+
+
+
+
+export const getRegisterMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof register>>, TError,{data: RegisterDeviceDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof register>>, TError,{data: RegisterDeviceDto}, TContext> => {
+
+const mutationKey = ['register'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof register>>, {data: RegisterDeviceDto}> = (props) => {
+          const {data} = props ?? {};
+
+          return  register(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RegisterMutationResult = NonNullable<Awaited<ReturnType<typeof register>>>
+    export type RegisterMutationBody = RegisterDeviceDto
+    export type RegisterMutationError = unknown
+
+    export const useRegister = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof register>>, TError,{data: RegisterDeviceDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof register>>,
+        TError,
+        {data: RegisterDeviceDto},
+        TContext
+      > => {
+      return useMutation(getRegisterMutationOptions(options), queryClient);
     }

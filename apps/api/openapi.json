@@ -220,6 +220,37 @@
           "requests"
         ]
       }
+    },
+    "/api/devices/register": {
+      "post": {
+        "operationId": "register",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterDeviceDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionUserDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "devices"
+        ]
+      }
     }
   },
   "info": {
@@ -291,7 +322,8 @@
             "type": "string"
           },
           "email": {
-            "type": "string"
+            "type": "string",
+            "nullable": true
           },
           "jobRole": {
             "allOf": [
@@ -717,6 +749,28 @@
         },
         "required": [
           "comment"
+        ]
+      },
+      "RegisterDeviceDto": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "example": "123456",
+            "description": "관리자 발급 등록 코드(숫자 6자리) — C-13"
+          },
+          "deviceUid": {
+            "type": "string",
+            "description": "기기 식별자 — 앱 설치 시 발급되는 UUID"
+          },
+          "deviceLabel": {
+            "type": "string",
+            "example": "갤럭시 A25"
+          }
+        },
+        "required": [
+          "code",
+          "deviceUid"
         ]
       }
     }

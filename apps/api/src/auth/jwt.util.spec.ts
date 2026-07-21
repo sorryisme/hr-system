@@ -14,6 +14,17 @@ describe('jwt.util', () => {
     });
   });
 
+  it('deviceId를 포함해 서명하면 페이로드에 함께 복원된다(기기 등록 세션 — C-13/N-10)', () => {
+    const now = 1_760_000_000_000;
+    const token = signJwt('42', secret, 3600, now, '7');
+    expect(verifyJwt(token, secret, now + 1000)).toEqual({
+      sub: '42',
+      deviceId: '7',
+      iat: 1_760_000_000,
+      exp: 1_760_003_600,
+    });
+  });
+
   it('만료된 토큰은 거부한다', () => {
     const now = 1_760_000_000_000;
     const token = signJwt('42', secret, 3600, now);

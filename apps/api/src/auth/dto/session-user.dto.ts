@@ -10,8 +10,9 @@ export class SessionUserDto {
   @ApiProperty()
   name!: string;
 
-  @ApiProperty()
-  email!: string;
+  /// STAFF(모바일 기기 등록 로그인)는 이메일 계정이 없을 수 있다 — email 컬럼 nullable(스키마)
+  @ApiProperty({ type: String, nullable: true })
+  email!: string | null;
 
   @ApiProperty({ enum: JobRole, enumName: 'JobRole' })
   jobRole!: JobRole;

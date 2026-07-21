@@ -26,5 +26,7 @@ import { PermissionsGuard } from './permissions.guard';
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: PermissionsGuard },
   ],
+  // devices 모듈(모바일 기기 등록 로그인)이 동일 시크릿으로 세션 JWT를 서명한다
+  exports: [JWT_SECRET],
 })
 export class AuthModule {}
