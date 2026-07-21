@@ -7,6 +7,12 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 export interface JwtPayload {
   /** employee.id 문자열 */
   sub: string;
+  /**
+   * UserDevice.id 문자열 — 기기 등록 기반 세션(모바일 C-13/N-10)에만 존재한다.
+   * 있으면 JwtAuthGuard가 매 요청 UserDevice.revokedAt을 검사해 기기 분실 시
+   * 관리자의 원격 로그아웃(엣지 7)이 토큰 만료를 기다리지 않고 즉시 반영되도록 한다.
+   */
+  deviceId?: string;
   iat: number;
   exp: number;
 }
@@ -20,14 +26,17 @@ export function signJwt(
   secret: string,
   ttlSeconds: number,
   now: number = Date.now(),
+  deviceId?: string,
 ): string {
   const header = Buffer.from(
     JSON.stringify({ alg: 'HS256', typ: 'JWT' }),
   ).toString('base64url');
   const iat = Math.floor(now / 1000);
-  const payload = Buffer.from(
-    JSON.stringify({ sub, iat, exp: iat + ttlSeconds } satisfies JwtPayload),
-  ).toString('base64url');
+  const payloadObj: JwtPayload = { sub, iat, exp: iat + ttlSeconds };
+  if (deviceId) {
+    payloadObj.deviceId = deviceId;
+  }
+  const payload = Buffer.from(JSON.stringify(payloadObj)).toString('base64url');
   const signature = hmac(`${header}.${payload}`, secret).toString('base64url');
   return `${header}.${payload}.${signature}`;
 }
@@ -61,12 +70,20 @@ export function verifyJwt(
   if (
     typeof candidate.sub !== 'string' ||
     typeof candidate.iat !== 'number' ||
-    typeof candidate.exp !== 'number'
+    typeof candidate.exp !== 'number' ||
+    (candidate.deviceId !== undefined && typeof candidate.deviceId !== 'string')
   ) {
     return null;
   }
   if (candidate.exp * 1000 <= now) {
     return null;
   }
-  return { sub: candidate.sub, iat: candidate.iat, exp: candidate.exp };
+  return {
+    sub: candidate.sub,
+    iat: candidate.iat,
+    exp: candidate.exp,
+    ...(typeof candidate.deviceId === 'string'
+      ? { deviceId: candidate.deviceId }
+      : {}),
+  };
 }

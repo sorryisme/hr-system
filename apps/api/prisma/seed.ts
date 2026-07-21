@@ -72,6 +72,23 @@ async function seedApprovalFixtures(facilityId: bigint) {
     '2': { email: 'manager@careshift.kr', passwordHash: devPasswordHash },
   };
 
+  // --- 모바일 기기 등록 로그인용 관리자 발급 코드(로컬 개발용 — C-13/N-10) ---
+  // pin_hash는 employee 테이블의 관리자 발급 코드 해시(scrypt, password.util 재사용).
+  // 관리자(1~2, ADMIN)는 웹 로그인 대상이라 코드를 발급하지 않는다 — 종사자(3~8, STAFF)에만 부여.
+  // 등록 성공 시 서버가 소진(null)시키므로, 재테스트하려면 db:seed를 다시 실행한다.
+  const staffPinCodes: Record<string, string> = {
+    '3': '333333',
+    '4': '123456',
+    '5': '555555',
+    '6': '666666',
+    '7': '777777',
+    '8': '888888',
+  };
+  const staffPinCredentials: Record<string, { pinHash: string }> = {};
+  for (const [id, code] of Object.entries(staffPinCodes)) {
+    staffPinCredentials[id] = { pinHash: await hashPassword(code) };
+  }
+
   // --- 직원 (고정 id upsert). 1~3 = 결재 권한자(서명 더미 필수 — D-12), 4~8 = 신청자 ---
   const employees = [
     { id: 1n, name: '김평온', jobRole: 'DIRECTOR', systemRole: 'ADMIN', hireDate: new Date('2015-03-01'), canShiftWork: false, signaturePath: 'signatures/emp1.png' },
@@ -86,10 +103,11 @@ async function seedApprovalFixtures(facilityId: bigint) {
   for (const emp of employees) {
     // 로그인 계정은 update에도 넣는다 — 마이그레이션 이전에 만들어진 기존 행에도 반영되도록
     const credential = adminCredentials[emp.id.toString()] ?? {};
+    const pinCredential = staffPinCredentials[emp.id.toString()] ?? {};
     await prisma.employee.upsert({
       where: { id: emp.id },
-      update: { ...credential },
-      create: { facilityId, ...credential, ...emp },
+      update: { ...credential, ...pinCredential },
+      create: { facilityId, ...credential, ...pinCredential, ...emp },
     });
   }
 

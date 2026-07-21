@@ -16,6 +16,7 @@ export * from './inboxStatusFilter';
 export * from './jobRole';
 export * from './listRequestsParams';
 export * from './loginRequestDto';
+export * from './registerDeviceDto';
 export * from './rejectRequestDto';
 export * from './requestDetailDto';
 export * from './requestLineDto';

@@ -67,8 +67,26 @@ export class JwtAuthGuard implements CanActivate {
         status: true,
       },
     });
-    if (!employee || employee.status !== 'ACTIVE' || !employee.email) {
+    if (!employee || employee.status !== 'ACTIVE') {
       throw unauthorized();
+    }
+
+    // 기기 등록 기반 세션(모바일 C-13/N-10)은 매 요청 기기 해제 여부를 확인한다 —
+    // 기기 분실 시 관리자의 원격 로그아웃(엣지 7)을 토큰 만료 전에도 즉시 반영하기 위함
+    if (payload.deviceId) {
+      let deviceId: bigint;
+      try {
+        deviceId = BigInt(payload.deviceId);
+      } catch {
+        throw unauthorized();
+      }
+      const device = await this.prisma.userDevice.findUnique({
+        where: { id: deviceId },
+        select: { employeeId: true, revokedAt: true },
+      });
+      if (!device || device.revokedAt || device.employeeId !== employeeId) {
+        throw unauthorized();
+      }
     }
 
     request.user = {

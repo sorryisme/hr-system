@@ -13,11 +13,16 @@ export const TOKEN_TTL_SECONDS = 12 * 60 * 60;
  * localhost:5173(Vite) → localhost:3000은 same-site cross-origin이라 SameSite=Lax로도
  * credentials 요청에 쿠키가 실린다. 운영(HTTPS 단일 도메인 뒤 CloudFront) 배포 시
  * secure를 켠다.
+ *
+ * ttlSeconds 기본값은 관리자 웹 세션(TOKEN_TTL_SECONDS)이고, 모바일 기기 등록 세션은
+ * devices 모듈이 DEVICE_SESSION_TTL_SECONDS를 넘겨 더 긴 만료를 쓴다(N-10).
  */
-export function authCookieOptions(): CookieOptions {
+export function authCookieOptions(
+  ttlSeconds: number = TOKEN_TTL_SECONDS,
+): CookieOptions {
   return {
     ...clearAuthCookieOptions(),
-    maxAge: TOKEN_TTL_SECONDS * 1000,
+    maxAge: ttlSeconds * 1000,
   };
 }
 
