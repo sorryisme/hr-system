@@ -6,11 +6,13 @@ import { isCompleteCode } from '../domain'
 export function CodeEntryScreen({
   code,
   error,
+  isSubmitting,
   onChangeCode,
   onSubmit,
 }: {
   code: string
   error: string | null
+  isSubmitting: boolean
   onChangeCode: (code: string) => void
   onSubmit: () => void
 }) {
@@ -37,10 +39,11 @@ export function CodeEntryScreen({
         value={code}
         onChange={(e) => onChangeCode(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === 'Enter' && complete) onSubmit()
+          if (e.key === 'Enter' && complete && !isSubmitting) onSubmit()
         }}
         inputMode="numeric"
         autoFocus
+        disabled={isSubmitting}
         placeholder="000000"
         aria-label="기기 등록 코드"
         className="mt-8 h-20 rounded-3xl border-2 text-center text-4xl font-black tracking-[0.5em]"
@@ -55,10 +58,10 @@ export function CodeEntryScreen({
       <div className="mt-auto flex flex-col gap-2.5 pt-6">
         <Button
           onClick={onSubmit}
-          disabled={!complete}
+          disabled={!complete || isSubmitting}
           className="h-auto w-full rounded-3xl bg-primary py-6 text-xl font-black text-primary-foreground shadow-lg hover:bg-primary/90"
         >
-          등록하기
+          {isSubmitting ? '등록 중…' : '등록하기'}
         </Button>
         <p className="text-center text-base text-muted-foreground">
           코드를 모르시면 관리자에게 문의해주세요

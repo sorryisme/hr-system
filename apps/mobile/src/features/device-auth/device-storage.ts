@@ -1,15 +1,17 @@
-const STORAGE_KEY = 'care-mobile-device-registered'
+const DEVICE_UID_KEY = 'care-mobile-device-uid'
 
 /**
- * 기기 "등록 여부"만 담는 불리언 플래그다 — 세션/인증 토큰이 아니므로
- * CLAUDE.md의 "토큰 localStorage 저장 금지" 규정과 무관하다.
- * 실제 백엔드 연동 시 인증 토큰은 httpOnly 쿠키로 관리하고,
- * 이 플래그는 "코드 입력 화면을 건너뛸지" 판단용 UI 캐시로만 남긴다.
+ * 이 기기를 가리키는 식별자(UUID)만 저장한다 — 로그인 여부 판단에는 쓰이지 않는다.
+ * 로그인 여부는 인증 토큰(httpOnly 쿠키)의 존재로 결정되며, 프론트는 이를 직접 읽을 수
+ * 없으므로 features/auth/session.ts가 GET /auth/me 결과로 판단한다(CLAUDE.md: 토큰
+ * localStorage 저장 금지 — 이 값은 토큰이 아니라 기기 식별자다).
  */
-export function isDeviceRegistered(): boolean {
-  return localStorage.getItem(STORAGE_KEY) === '1'
-}
-
-export function markDeviceRegistered(): void {
-  localStorage.setItem(STORAGE_KEY, '1')
+export function getOrCreateDeviceUid(): string {
+  const existing = localStorage.getItem(DEVICE_UID_KEY)
+  if (existing) {
+    return existing
+  }
+  const uid = crypto.randomUUID()
+  localStorage.setItem(DEVICE_UID_KEY, uid)
+  return uid
 }
