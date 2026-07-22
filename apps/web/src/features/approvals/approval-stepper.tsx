@@ -1,6 +1,12 @@
-import type { RequestDetailDto } from '@/api/generated/model'
+import type { RequestDetailDto, RequestLineDto } from '@/api/generated/model'
 import { cn } from '@/lib/utils'
 import { JOB_ROLE_LABELS } from './labels'
+
+/** 결재자 후보가 여럿이면(취소 요청 — 누구든 결재 가능) 역할을 '/'로 이어붙인다 */
+function approversLabel(line: RequestLineDto): string {
+  const roles = [...new Set(line.approvers.map((a) => JOB_ROLE_LABELS[a.jobRole]))]
+  return roles.join('/')
+}
 
 type StepState = 'done' | 'current' | 'upcoming' | 'rejected' | 'skipped'
 
@@ -60,7 +66,7 @@ export function ApprovalStepper({ detail }: { detail: RequestDetailDto }) {
               <div className="text-center text-xs font-bold leading-tight">
                 {line.stepNo}차
                 <br />
-                {JOB_ROLE_LABELS[line.approver.jobRole]}
+                {approversLabel(line)}
               </div>
               <div
                 className={cn(

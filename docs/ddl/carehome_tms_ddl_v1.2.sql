@@ -244,20 +244,24 @@ CREATE TABLE approval_request (
 ) ENGINE=InnoDB COMMENT='결재 신청 헤더';
 
 -- [v1.2 신설] 제출 시점 결재선 스냅샷 (엣지 12 — 설정 중도 변경 비소급)
+-- [v1.2.1] CANCEL 유형은 stepNo=1 고정 + 시설 결재선 전원을 후보로 스냅샷(누구든 결재 가능).
+-- 한 step_no에 여러 결재자 후보 행이 생길 수 있어 PK에 approver_id를 포함한다.
 CREATE TABLE approval_request_line (
   request_id          BIGINT UNSIGNED NOT NULL,
-  step_no             TINYINT UNSIGNED NOT NULL COMMENT '1~3',
-  approver_id         BIGINT UNSIGNED NOT NULL COMMENT '제출 시점에 확정된 해당 단계 결재자
-                                                         (역할 지정이면 당시 재직자로 해석·고정)',
+  step_no             TINYINT UNSIGNED NOT NULL COMMENT '1~3. CANCEL 유형은 1로 고정',
+  approver_id         BIGINT UNSIGNED NOT NULL COMMENT '제출 시점에 확정된 해당 단계 결재자 후보
+                                                         (역할 지정이면 당시 재직자로 해석·고정).
+                                                         같은 step_no에 여러 행이면 그 중 누구든
+                                                         결재 시 해당 단계가 처리된다(CANCEL 유형)',
   deputy_id           BIGINT UNSIGNED NULL,
   delegation_enabled  TINYINT(1)      NOT NULL DEFAULT 0 COMMENT '제출 시점 전결 설정(step 2)',
-  PRIMARY KEY (request_id, step_no),
+  PRIMARY KEY (request_id, step_no, approver_id),
   CONSTRAINT fk_reqline_req      FOREIGN KEY (request_id)  REFERENCES approval_request(id)
     ON DELETE CASCADE,
   CONSTRAINT fk_reqline_approver FOREIGN KEY (approver_id) REFERENCES employee(id),
   CONSTRAINT fk_reqline_deputy   FOREIGN KEY (deputy_id)   REFERENCES employee(id),
   CONSTRAINT chk_reqline_step CHECK (step_no BETWEEN 1 AND 3)
-) ENGINE=InnoDB COMMENT='신청별 결재선 스냅샷. 자기결재 회피(D-6)로 재배정된 결과를 반영해 저장';
+) ENGINE=InnoDB COMMENT='신청별 결재선 스냅샷. 자기결재 회피(D-6)로 재배정된 결과를 반영해 저장. CANCEL 유형은 stepNo=1에 결재선 전원을 후보로 저장(누구든 결재 가능)';
 
 -- 신청 대상일 (target_dates[] 정규화 — MySQL 배열 미지원 대응)
 CREATE TABLE approval_request_date (

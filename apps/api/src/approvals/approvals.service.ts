@@ -329,6 +329,9 @@ export class ApprovalsService {
     }
   }
 
+  /// CANCEL 유형은 stepNo=1에 시설 결재선 전원이 후보로 스냅샷돼 있다(결재라인 1개 제한,
+  /// 누구든 결재 가능 — leave.service.ts resolveCancellationRequestLines). 그래서 같은
+  /// stepNo에 여러 후보 행이 있을 수 있어, 대표로 첫 행만 보는 대신 후보 전체를 검사한다.
   private resolveCurrentStep(
     req: Prisma.ApprovalRequestGetPayload<{
       include: { requestLines: true; targetDates: true };
@@ -336,8 +339,8 @@ export class ApprovalsService {
     actorId: bigint,
   ) {
     const nextStepNo = req.currentStep + 1;
-    const line = req.requestLines.find((l) => l.stepNo === nextStepNo);
-    if (!line) {
+    const candidates = req.requestLines.filter((l) => l.stepNo === nextStepNo);
+    if (candidates.length === 0) {
       // 스냅샷에 다음 단계가 없으면 이미 종결됐어야 하는 건 — 방어적 409
       throw this.conflict('ALREADY_FINALIZED');
     }
@@ -349,8 +352,9 @@ export class ApprovalsService {
     }
     // 하위 결재 허용: 현재 단계의 결재자/대결자 외에 상위 단계 결재자도
     // 하위 단계를 대신 결재할 수 있다(예: 2차→1차, 3차→1·2차)
-    const isCurrentAssignee =
-      line.approverId === actorId || line.deputyId === actorId;
+    const isCurrentAssignee = candidates.some(
+      (l) => l.approverId === actorId || l.deputyId === actorId,
+    );
     const isHigherApprover = req.requestLines.some(
       (l) => l.stepNo > nextStepNo && l.approverId === actorId,
     );
@@ -361,6 +365,7 @@ export class ApprovalsService {
       );
     }
     const totalSteps = Math.max(...req.requestLines.map((l) => l.stepNo));
+    const line = candidates[0];
     return { line, nextStepNo, totalSteps, isCurrentAssignee };
   }
 
@@ -437,15 +442,24 @@ export class ApprovalsService {
   }
 
   private toDetail(row: DetailRow): RequestDetailDto {
+    // CANCEL 유형은 같은 stepNo에 결재자 후보가 여러 행 있을 수 있다(누구든 결재
+    // 가능 — leave.service.ts resolveCancellationRequestLines) — 단계별로 묶어
+    // approvers 배열로 응답한다(일반 신청은 항상 후보 1명).
+    const stepNumbers = [...new Set(row.requestLines.map((l) => l.stepNo))].sort(
+      (a, b) => a - b,
+    );
     return {
       ...this.toListItem(row),
       finalizedAt: row.finalizedAt?.toISOString() ?? null,
-      requestLines: row.requestLines.map((line) => ({
-        stepNo: line.stepNo,
-        approver: this.toEmployee(line.approver),
-        deputy: line.deputy ? this.toEmployee(line.deputy) : null,
-        delegationEnabled: line.delegationEnabled,
-      })),
+      requestLines: stepNumbers.map((stepNo) => {
+        const candidates = row.requestLines.filter((l) => l.stepNo === stepNo);
+        return {
+          stepNo,
+          approvers: candidates.map((l) => this.toEmployee(l.approver)),
+          deputy: candidates[0].deputy ? this.toEmployee(candidates[0].deputy) : null,
+          delegationEnabled: candidates[0].delegationEnabled,
+        };
+      }),
       histories: row.histories.map((h) => ({
         id: h.id.toString(),
         action: h.action,

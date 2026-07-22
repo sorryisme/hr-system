@@ -1,7 +1,12 @@
 import { PenLine } from 'lucide-react'
-import type { RequestDetailDto } from '@/api/generated/model'
+import type { RequestDetailDto, RequestLineDto } from '@/api/generated/model'
 import { cn } from '@/lib/utils'
 import { JOB_ROLE_LABELS } from './labels'
+
+/** 결재자 후보가 여럿이면(취소 요청 — 누구든 결재 가능) 이름·역할을 모두 나열한다 */
+function approversLabel(line: RequestLineDto): string {
+  return line.approvers.map((a) => `${a.name} ${JOB_ROLE_LABELS[a.jobRole]}`).join(', ')
+}
 
 /** 결재란·서명(D-12). 스토리지 미도입 — 스냅샷 경로가 있으면 서명 완료 표시로 대체 */
 export function SignatureBoxes({ detail }: { detail: RequestDetailDto }) {
@@ -41,7 +46,7 @@ export function SignatureBoxes({ detail }: { detail: RequestDetailDto }) {
                 )}
               </div>
               <div className="mt-1.5 text-xs text-muted-foreground">
-                {line.stepNo}차 · {line.approver.name} {JOB_ROLE_LABELS[line.approver.jobRole]}
+                {line.stepNo}차 · {approversLabel(line)}
               </div>
             </div>
           )

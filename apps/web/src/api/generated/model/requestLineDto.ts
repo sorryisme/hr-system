@@ -8,7 +8,7 @@ import type { EmployeeSummaryDto } from './employeeSummaryDto';
 
 export interface RequestLineDto {
   stepNo: number;
-  approver: EmployeeSummaryDto;
+  approvers: EmployeeSummaryDto[];
   /** @nullable */
   deputy: EmployeeSummaryDto | null;
   delegationEnabled: boolean;

@@ -340,6 +340,52 @@ export class LeaveService {
   ): Promise<
     { stepNo: number; approverId: bigint; deputyId: bigint | null; delegationEnabled: boolean }[]
   > {
+    const lines = await this.findActiveApprovalLines(tx, facilityId);
+    const result: {
+      stepNo: number;
+      approverId: bigint;
+      deputyId: bigint | null;
+      delegationEnabled: boolean;
+    }[] = [];
+    for (const line of lines) {
+      const approverId = await this.resolveApproverId(tx, facilityId, line);
+      result.push({
+        stepNo: line.stepNo,
+        approverId,
+        deputyId: line.deputyId,
+        delegationEnabled: line.delegationEnabled,
+      });
+    }
+    return result;
+  }
+
+  /// 취소 요청(type=CANCEL) 전용 결재선 스냅샷. 결재라인은 1단계로 고정하고, 시설
+  /// 결재선(1~3단계)에 등록된 결재자 전원을 그 1단계의 후보로 저장한다 — 누구든
+  /// 먼저 결재하면 즉시 종결된다(대결자·전결 개념은 적용하지 않음).
+  private async resolveCancellationRequestLines(
+    tx: Prisma.TransactionClient,
+    facilityId: bigint,
+  ): Promise<
+    { stepNo: number; approverId: bigint; deputyId: bigint | null; delegationEnabled: boolean }[]
+  > {
+    const lines = await this.findActiveApprovalLines(tx, facilityId);
+    const approverIds = new Set<bigint>();
+    for (const line of lines) {
+      const approverId = await this.resolveApproverId(tx, facilityId, line);
+      approverIds.add(approverId);
+    }
+    return [...approverIds].map((approverId) => ({
+      stepNo: 1,
+      approverId,
+      deputyId: null,
+      delegationEnabled: false,
+    }));
+  }
+
+  private async findActiveApprovalLines(
+    tx: Prisma.TransactionClient,
+    facilityId: bigint,
+  ) {
     const today = startOfUtcDay(new Date());
     const lines = await tx.approvalLine.findMany({
       where: {
@@ -355,42 +401,36 @@ export class LeaveService {
         message: '결재선이 설정되어 있지 않습니다.',
       });
     }
+    return lines;
+  }
 
-    const result: {
-      stepNo: number;
-      approverId: bigint;
-      deputyId: bigint | null;
-      delegationEnabled: boolean;
-    }[] = [];
-    for (const line of lines) {
-      let approverId = line.approverId;
-      if (!approverId && line.approverRole) {
-        // 동일 역할 재직자가 여럿이면 가장 먼저 등록된 사람을 결재자로 삼는다(현재 시설당 역할별 1인 가정)
-        const holder = await tx.employee.findFirst({
-          where: {
-            facilityId,
-            jobRole: APPROVER_ROLE_TO_JOB_ROLE[line.approverRole],
-            status: 'ACTIVE',
-          },
-          orderBy: { id: 'asc' },
-          select: { id: true },
-        });
-        approverId = holder?.id ?? null;
-      }
-      if (!approverId) {
-        throw new BadRequestException({
-          code: 'APPROVER_NOT_FOUND',
-          message: `${line.stepNo}단계 결재자를 찾을 수 없습니다.`,
-        });
-      }
-      result.push({
-        stepNo: line.stepNo,
-        approverId,
-        deputyId: line.deputyId,
-        delegationEnabled: line.delegationEnabled,
+  /// 역할 지정 라인은 현재 재직자로 해석해 고정한다. 동일 역할 재직자가 여럿이면
+  /// 가장 먼저 등록된 사람을 결재자로 삼는다(현재 시설당 역할별 1인 가정).
+  private async resolveApproverId(
+    tx: Prisma.TransactionClient,
+    facilityId: bigint,
+    line: { stepNo: number; approverId: bigint | null; approverRole: string | null },
+  ): Promise<bigint> {
+    let approverId = line.approverId;
+    if (!approverId && line.approverRole) {
+      const holder = await tx.employee.findFirst({
+        where: {
+          facilityId,
+          jobRole: APPROVER_ROLE_TO_JOB_ROLE[line.approverRole],
+          status: 'ACTIVE',
+        },
+        orderBy: { id: 'asc' },
+        select: { id: true },
+      });
+      approverId = holder?.id ?? null;
+    }
+    if (!approverId) {
+      throw new BadRequestException({
+        code: 'APPROVER_NOT_FOUND',
+        message: `${line.stepNo}단계 결재자를 찾을 수 없습니다.`,
       });
     }
-    return result;
+    return approverId;
   }
 
   private toDetail(row: BalanceRow): LeaveBalanceDetailDto {
@@ -402,7 +442,8 @@ export class LeaveService {
     };
   }
 
-  /// 취소 요청(type=CANCEL) 생성. resolveRequestLines를 그대로 재사용하고, 원건의 대상일을
+  /// 취소 요청(type=CANCEL) 생성. resolveCancellationRequestLines로 결재라인을 1단계로
+  /// 제한하고 시설 결재선 전원을 후보로 스냅샷한다(누구든 결재 가능). 원건의 대상일을
   /// 그대로 복사해 관리자 결재함에서 무엇을 취소하려는지 바로 보이게 한다.
   /// 이미 진행 중인 취소 요청이 있으면 중복 생성하지 않고 거부한다.
   private async createCancellationRequest(
@@ -423,7 +464,10 @@ export class LeaveService {
       });
     }
 
-    const requestLines = await this.resolveRequestLines(tx, original.facilityId);
+    const requestLines = await this.resolveCancellationRequestLines(
+      tx,
+      original.facilityId,
+    );
     await tx.approvalRequest.create({
       data: {
         facilityId: original.facilityId,

@@ -15,7 +15,7 @@ const typeBadgeVariants = cva('border-transparent', {
       HALF_PM: 'bg-approve/10 text-approve',
       SUBSTITUTE_HOLIDAY: 'bg-approve/15 text-approve',
       SHIFT_CHANGE: 'bg-brand/10 text-brand',
-      CANCEL: 'bg-muted text-muted-foreground',
+      CANCEL: 'bg-brand/10 text-brand',
     },
   },
 })
