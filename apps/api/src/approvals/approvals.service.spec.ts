@@ -474,6 +474,56 @@ describe('ApprovalsService 상태머신', () => {
       });
     });
 
+    it('취소 요청은 결재라인이 1단계이고 결재선 후보 3명 중 누구든 승인 시 즉시 종결된다', async () => {
+      const cancelRequest = transitionRow({
+        id: 10n,
+        type: 'CANCEL',
+        refRequestId: 1n,
+        leaveDays: null,
+        // 시설 결재선 3명(3n/2n/1n) 전원이 stepNo=1의 후보로 스냅샷됨
+        requestLines: [line(1, 3n), line(1, 2n), line(1, 1n)],
+      });
+      const original = transitionRow({
+        id: 1n,
+        status: 'INTERIM_APPROVED',
+        currentStep: 1,
+        leaveDays: new Prisma.Decimal('2.0'),
+      });
+      tx.approvalRequest.findUnique
+        .mockResolvedValueOnce(cancelRequest)
+        .mockResolvedValueOnce(original);
+
+      // 3명 중 가장 낮은 순번(1n)이 아니라 중간(2n)이 먼저 결재해도 즉시 승인 확정된다
+      await service.approveRequest('10', '2');
+
+      expect(tx.approvalRequest.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: containing({ status: 'APPROVED', currentStep: 1 }),
+        }),
+      );
+      expect(tx.approvalRequest.update).toHaveBeenCalledWith({
+        where: { id: 1n },
+        data: containing({ status: 'CANCELED' }),
+      });
+    });
+
+    it('취소 요청은 결재선 후보가 아니면 순번과 무관하게 409 NOT_YOUR_STEP', async () => {
+      const cancelRequest = transitionRow({
+        id: 10n,
+        type: 'CANCEL',
+        refRequestId: 1n,
+        leaveDays: null,
+        requestLines: [line(1, 3n), line(1, 2n), line(1, 1n)],
+      });
+      tx.approvalRequest.findUnique.mockResolvedValue(cancelRequest);
+
+      await expectHttpCode(
+        service.approveRequest('10', '8'),
+        ConflictException,
+        'NOT_YOUR_STEP',
+      );
+    });
+
     it('취소 요청이 반려되면 원건은 그대로 유지된다(잔여 미변경)', async () => {
       const cancelRequest = transitionRow({
         id: 10n,

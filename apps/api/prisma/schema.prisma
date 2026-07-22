@@ -318,9 +318,11 @@ model ApprovalRequestDate {
 /// 자기결재 회피(D-6)로 재배정된 결과를 반영해 저장
 model ApprovalRequestLine {
   requestId         BigInt  @map("request_id") @db.UnsignedBigInt
-  /// 1~3
+  /// 1~3. CANCEL 유형은 1단계로 고정하고, 해당 시설 결재선에 등록된 결재자 전원을
+  /// stepNo=1의 후보로 스냅샷한다(누구든 결재 가능 — leave.service.ts resolveCancellationRequestLines)
   stepNo            Int     @map("step_no") @db.UnsignedTinyInt
-  /// 제출 시점에 확정된 해당 단계 결재자(역할 지정이면 당시 재직자로 해석·고정)
+  /// 제출 시점에 확정된 해당 단계 결재자 후보(역할 지정이면 당시 재직자로 해석·고정).
+  /// 같은 stepNo에 여러 행이 있으면 그 중 누구든 결재 시 해당 단계가 처리된다.
   approverId        BigInt  @map("approver_id") @db.UnsignedBigInt
   deputyId          BigInt? @map("deputy_id") @db.UnsignedBigInt
   /// 제출 시점 전결 설정(step 2)
@@ -330,7 +332,7 @@ model ApprovalRequestLine {
   approver Employee        @relation("ApprovalRequestLineApprover", fields: [approverId], references: [id])
   deputy   Employee?       @relation("ApprovalRequestLineDeputy", fields: [deputyId], references: [id])
 
-  @@id([requestId, stepNo])
+  @@id([requestId, stepNo, approverId])
   @@map("approval_request_line")
 }
 

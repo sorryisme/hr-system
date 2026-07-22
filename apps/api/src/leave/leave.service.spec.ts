@@ -365,7 +365,7 @@ describe('LeaveService', () => {
       );
     });
 
-    it('1차 이상 승인(INTERIM_APPROVED)된 건은 즉시 취소하지 않고 취소 요청을 생성한다', async () => {
+    it('1차 이상 승인(INTERIM_APPROVED)된 건은 즉시 취소하지 않고 취소 요청을 생성한다 — 결재라인 1단계 + 결재선 전원이 후보', async () => {
       tx.approvalRequest.findUnique.mockResolvedValue({
         id: 1n,
         facilityId: 1n,
@@ -376,7 +376,13 @@ describe('LeaveService', () => {
         createdAt: new Date('2026-07-15T00:00:00Z'),
         targetDates: [{ targetDate: new Date('2026-07-21T00:00:00Z') }],
       });
-      tx.approvalLine.findMany.mockResolvedValue([line(1, { approverId: 3n })]);
+      // 시설 결재선은 3단계(사회복지사→사무국장→시설장)지만, 취소 요청은 이 3명을
+      // 모두 stepNo=1의 결재자 후보로 스냅샷한다 — 누구든 결재하면 즉시 종결.
+      tx.approvalLine.findMany.mockResolvedValue([
+        line(1, { approverId: 3n }),
+        line(2, { approverId: 2n }),
+        line(3, { approverId: 1n }),
+      ]);
 
       const result = await service.cancelRequest(4n, '1');
 
@@ -390,7 +396,42 @@ describe('LeaveService', () => {
             type: ApprovalRequestType.CANCEL,
             refRequestId: 1n,
             requesterId: 4n,
-            requestLines: { create: [{ stepNo: 1, approverId: 3n, deputyId: null, delegationEnabled: false }] },
+            requestLines: {
+              create: [
+                { stepNo: 1, approverId: 3n, deputyId: null, delegationEnabled: false },
+                { stepNo: 1, approverId: 2n, deputyId: null, delegationEnabled: false },
+                { stepNo: 1, approverId: 1n, deputyId: null, delegationEnabled: false },
+              ],
+            },
+          }),
+        }),
+      );
+    });
+
+    it('취소 요청 결재자 후보는 중복 제거된다(같은 사람이 여러 역할을 겸임하는 경우)', async () => {
+      tx.approvalRequest.findUnique.mockResolvedValue({
+        id: 1n,
+        facilityId: 1n,
+        requesterId: 4n,
+        status: ApprovalRequestStatus.INTERIM_APPROVED,
+        type: ApprovalRequestType.ANNUAL,
+        leaveDays: decimal('2.0'),
+        createdAt: new Date('2026-07-15T00:00:00Z'),
+        targetDates: [{ targetDate: new Date('2026-07-21T00:00:00Z') }],
+      });
+      tx.approvalLine.findMany.mockResolvedValue([
+        line(1, { approverId: 3n }),
+        line(2, { approverId: 3n }),
+      ]);
+
+      await service.cancelRequest(4n, '1');
+
+      expect(tx.approvalRequest.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            requestLines: {
+              create: [{ stepNo: 1, approverId: 3n, deputyId: null, delegationEnabled: false }],
+            },
           }),
         }),
       );

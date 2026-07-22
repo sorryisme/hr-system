@@ -650,8 +650,11 @@
           "stepNo": {
             "type": "number"
           },
-          "approver": {
-            "$ref": "#/components/schemas/EmployeeSummaryDto"
+          "approvers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EmployeeSummaryDto"
+            }
           },
           "deputy": {
             "nullable": true,
@@ -668,7 +671,7 @@
         },
         "required": [
           "stepNo",
-          "approver",
+          "approvers",
           "deputy",
           "delegationEnabled"
         ]

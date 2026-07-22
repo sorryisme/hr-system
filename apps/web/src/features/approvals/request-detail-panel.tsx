@@ -79,10 +79,10 @@ function RequestDetailContent({ requestId }: { requestId: string }) {
     !!detail &&
     !!currentLine &&
     user.id !== detail.requester.id &&
-    (currentLine.approver.id === user.id ||
+    (currentLine.approvers.some((a) => a.id === user.id) ||
       currentLine.deputy?.id === user.id ||
       detail.requestLines.some(
-        (l) => l.stepNo > currentLine.stepNo && l.approver.id === user.id,
+        (l) => l.stepNo > currentLine.stepNo && l.approvers.some((a) => a.id === user.id),
       ))
 
   const isOpen = detail?.status === 'PENDING' || detail?.status === 'INTERIM_APPROVED'
@@ -98,7 +98,7 @@ function RequestDetailContent({ requestId }: { requestId: string }) {
     currentLine.stepNo === 2 &&
     detail.totalSteps > 2 &&
     !currentLine.delegationEnabled &&
-    (currentLine.approver.id === user.id || currentLine.deputy?.id === user.id)
+    (currentLine.approvers.some((a) => a.id === user.id) || currentLine.deputy?.id === user.id)
 
   return (
     <aside className="w-[460px] shrink-0 overflow-y-auto border-l bg-card">

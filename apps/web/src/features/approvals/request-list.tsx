@@ -44,8 +44,11 @@ export function RequestList({
             type="button"
             onClick={() => onSelect(item.id)}
             className={cn(
-              'block w-full border-b px-5 py-3.5 text-left transition-colors hover:bg-paper',
-              selectedId === item.id && 'bg-paper',
+              'block w-full border-b px-5 py-3.5 text-left transition-colors',
+              // 취소 요청은 결재자 조치가 필요한 항목임을 한눈에 구분할 수 있도록
+              // brand 톤 배경을 얹는다(일반 신청과 시각적으로 혼동되지 않게 — badges.tsx TypeBadge와 동일 톤)
+              item.type === 'CANCEL' ? 'bg-brand/5 hover:bg-brand/10' : 'hover:bg-paper',
+              selectedId === item.id && (item.type === 'CANCEL' ? 'bg-brand/10' : 'bg-paper'),
             )}
           >
             <div className={GRID}>
