@@ -251,6 +251,110 @@
           "devices"
         ]
       }
+    },
+    "/api/leave/balance": {
+      "get": {
+        "operationId": "getBalance",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeaveBalanceResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "leave"
+        ]
+      }
+    },
+    "/api/leave/requests": {
+      "get": {
+        "operationId": "getMyRequests",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MyLeaveRequestDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "leave"
+        ]
+      },
+      "post": {
+        "operationId": "submitRequest",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateLeaveRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyLeaveRequestDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "leave"
+        ]
+      }
+    },
+    "/api/leave/requests/{id}/cancel": {
+      "post": {
+        "operationId": "cancelRequest",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CancelLeaveRequestResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "leave"
+        ]
+      }
     }
   },
   "info": {
@@ -771,6 +875,169 @@
         "required": [
           "code",
           "deviceUid"
+        ]
+      },
+      "LeaveBalanceDetailDto": {
+        "type": "object",
+        "properties": {
+          "granted": {
+            "type": "string",
+            "example": "17.0"
+          },
+          "used": {
+            "type": "string",
+            "example": "1.0"
+          },
+          "reserved": {
+            "type": "string",
+            "example": "0.5"
+          },
+          "remaining": {
+            "type": "string",
+            "example": "15.5"
+          }
+        },
+        "required": [
+          "granted",
+          "used",
+          "reserved",
+          "remaining"
+        ]
+      },
+      "LeaveBalanceResponseDto": {
+        "type": "object",
+        "properties": {
+          "balanceYear": {
+            "type": "number"
+          },
+          "annual": {
+            "$ref": "#/components/schemas/LeaveBalanceDetailDto"
+          },
+          "substituteHoliday": {
+            "$ref": "#/components/schemas/LeaveBalanceDetailDto"
+          }
+        },
+        "required": [
+          "balanceYear",
+          "annual",
+          "substituteHoliday"
+        ]
+      },
+      "MyLeaveRequestDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ApprovalRequestType"
+              }
+            ]
+          },
+          "status": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ApprovalRequestStatus"
+              }
+            ]
+          },
+          "targetDates": {
+            "description": "YYYY-MM-DD",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true
+          },
+          "isRetroactive": {
+            "type": "boolean",
+            "description": "사후 신청 라벨(D-3)"
+          },
+          "pendingCancellation": {
+            "type": "boolean",
+            "description": "취소 승인 요청이 진행 중인지 여부"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "status",
+          "targetDates",
+          "reason",
+          "isRetroactive",
+          "pendingCancellation",
+          "createdAt"
+        ]
+      },
+      "LeaveRequestType": {
+        "type": "string",
+        "enum": [
+          "ANNUAL",
+          "HALF_AM",
+          "HALF_PM",
+          "SUBSTITUTE_HOLIDAY"
+        ]
+      },
+      "CreateLeaveRequestDto": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/LeaveRequestType"
+              }
+            ]
+          },
+          "targetDates": {
+            "description": "YYYY-MM-DD",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "description": "더블탭 중복 제출 방지용 클라이언트 생성 UUID"
+          }
+        },
+        "required": [
+          "type",
+          "targetDates"
+        ]
+      },
+      "CancelResult": {
+        "type": "string",
+        "enum": [
+          "CANCELED",
+          "CANCELLATION_REQUESTED"
+        ]
+      },
+      "CancelLeaveRequestResponseDto": {
+        "type": "object",
+        "properties": {
+          "result": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CancelResult"
+              }
+            ]
+          }
+        },
+        "required": [
+          "result"
         ]
       }
     }

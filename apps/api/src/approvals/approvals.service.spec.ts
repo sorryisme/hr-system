@@ -12,6 +12,8 @@ import { PrismaService } from '../prisma/prisma.service';
 type TxMock = {
   approvalRequest: {
     findUnique: jest.Mock;
+    findFirst: jest.Mock;
+    update: jest.Mock;
     updateMany: jest.Mock;
     findUniqueOrThrow: jest.Mock;
   };
@@ -99,6 +101,9 @@ describe('ApprovalsService 상태머신', () => {
     tx = {
       approvalRequest: {
         findUnique: jest.fn(),
+        // 기본값: 이 건을 대상으로 한 진행 중인 취소 요청 없음(loadForTransition 가드)
+        findFirst: jest.fn().mockResolvedValue(null),
+        update: jest.fn().mockResolvedValue({}),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
         findUniqueOrThrow: jest.fn().mockResolvedValue(detailRow()),
       },
@@ -398,5 +403,90 @@ describe('ApprovalsService 상태머신', () => {
 
     expect(tx.leaveBalance.update).not.toHaveBeenCalled();
     expect(tx.substituteHolidayBalance.update).not.toHaveBeenCalled();
+  });
+
+  describe('취소 승인 워크플로(1차 이상 승인된 건의 취소는 관리자 승인 필요)', () => {
+    it('취소 요청이 진행 중인 원건은 승인할 수 없다 — 409 CANCELLATION_PENDING', async () => {
+      tx.approvalRequest.findUnique.mockResolvedValue(transitionRow());
+      tx.approvalRequest.findFirst.mockResolvedValue({
+        id: 99n,
+        refRequestId: 1n,
+        type: 'CANCEL',
+        status: 'PENDING',
+      });
+
+      await expectHttpCode(
+        service.approveRequest('1', '3'),
+        ConflictException,
+        'CANCELLATION_PENDING',
+      );
+      expect(tx.approvalRequest.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('취소 요청이 진행 중인 원건은 반려할 수도 없다 — 409 CANCELLATION_PENDING', async () => {
+      tx.approvalRequest.findUnique.mockResolvedValue(transitionRow());
+      tx.approvalRequest.findFirst.mockResolvedValue({
+        id: 99n,
+        refRequestId: 1n,
+        type: 'CANCEL',
+        status: 'INTERIM_APPROVED',
+      });
+
+      await expectHttpCode(
+        service.rejectRequest('1', '3', '사유'),
+        ConflictException,
+        'CANCELLATION_PENDING',
+      );
+    });
+
+    it('취소 요청(type=CANCEL) 최종 승인 → 원건 CANCELED 전환 + reserved 반환', async () => {
+      const cancelRequest = transitionRow({
+        id: 10n,
+        type: 'CANCEL',
+        refRequestId: 1n,
+        leaveDays: null,
+        requestLines: [line(1, 3n)],
+      });
+      const original = transitionRow({
+        id: 1n,
+        status: 'INTERIM_APPROVED',
+        currentStep: 1,
+        leaveDays: new Prisma.Decimal('2.0'),
+      });
+      tx.approvalRequest.findUnique
+        .mockResolvedValueOnce(cancelRequest) // loadForTransition: 취소 요청 자체를 로드
+        .mockResolvedValueOnce(original); // applyCancellation: 원건을 로드
+
+      await service.approveRequest('10', '3');
+
+      expect(tx.approvalRequest.update).toHaveBeenCalledWith({
+        where: { id: 1n },
+        data: containing({ status: 'CANCELED' }),
+      });
+      expect(tx.leaveBalance.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { employeeId_balanceYear: { employeeId: 5n, balanceYear: 2026 } },
+          data: { reserved: { decrement: new Prisma.Decimal('2.0') } },
+        }),
+      );
+      expect(tx.approvalHistory.create).toHaveBeenCalledWith({
+        data: containing({ requestId: 1n, action: 'CANCEL' }),
+      });
+    });
+
+    it('취소 요청이 반려되면 원건은 그대로 유지된다(잔여 미변경)', async () => {
+      const cancelRequest = transitionRow({
+        id: 10n,
+        type: 'CANCEL',
+        refRequestId: 1n,
+        leaveDays: null,
+      });
+      tx.approvalRequest.findUnique.mockResolvedValue(cancelRequest);
+
+      await service.rejectRequest('10', '3', '취소 사유가 불충분합니다');
+
+      expect(tx.approvalRequest.update).not.toHaveBeenCalled();
+      expect(tx.leaveBalance.update).not.toHaveBeenCalled();
+    });
   });
 });
