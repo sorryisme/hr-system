@@ -36,7 +36,7 @@ care/
    ├─ plan/                                    # 기능요구사항·개발계획 (근태/근무표/가산점수 등 도메인 규칙)
    ├─ ddl/carehome_tms_ddl_v1.1.sql             # MySQL DDL (Prisma 미도입, 스키마만 존재)
    ├─ mock-ui/                                  # 결재 등 화면 목업
-   └─ {날짜}-{작업제목}.md                       # 코드 작업 산출물 (General 규칙에 따라 생성)
+   └─ logs/{년월일}/{yyyy-MM-dd}-{작업제목}.md   # 코드 작업 산출물 (General 규칙에 따라 생성)
 ```
 
 - Orval 연동(OpenAPI → 프론트 타입)은 각 프론트(apps/web, apps/mobile)에 실제 API 클라이언트가 필요해지는 시점에 구성한다. 그 전까지는 백엔드를 호출하지 않는다.
@@ -71,4 +71,4 @@ care/
 ## General
 - any 금지. eslint-disable은 사유 필수.
 - NestJS v12, TypeScript 6.0, Prisma Next 등 메이저 업그레이드는 사람 승인 없이 수행하지 않는다.
-- 지시한 코드 작업 이후 산출물을 작성하여 DOCS에 추가한다. 산출물 작성 시 docs/logs/{날짜}-{작업제목}.md 형태로 저장한다.
+- 지시한 코드 작업 이후 산출물을 작성하여 DOCS에 추가한다. 산출물 작성 시 docs/logs/{년월일}/{yyyy-MM-dd}-{작업제목}.md 형태로 저장한다. 작성 전 반드시 해당 날짜의 docs/logs/{년월일}/ 폴더가 존재하는지 확인하고, 없으면 새로 생성한 뒤 그 안에 추가/이동한다. docs/logs/ 루트에 날짜 파일을 직접 두지 않는다.
