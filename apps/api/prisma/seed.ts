@@ -10,6 +10,28 @@ if (!databaseUrl) {
 }
 const prisma = new PrismaClient({ adapter: new PrismaMariaDb(databaseUrl) });
 
+// 시드 재실행 시에도 동일한 값이 나오도록 산정 기준일을 고정한다(오늘 날짜에 의존하지 않음).
+const AS_OF_DATE = new Date('2026-07-22T00:00:00Z');
+
+/**
+ * D-9 연차 부여 규칙(근로기준법 제60조, docs/plan/dev_plan_0720.md §D-9).
+ * - 입사 1년 미만: 개근 개월 수만큼 1일씩 부여(최대 11일)
+ * - 입사 1년 이상: 1년차 15일, 이후 2년마다 +1일(3년차 16, 5년차 17…), 가산 포함 총 상한 25일
+ * balanceYear는 입사일 기준 연차연도의 시작 연도(schema.prisma LeaveBalance 주석 참고).
+ */
+function calculateAnnualLeaveGrant(hireDate: Date, balanceYear: number, asOf: Date): string {
+  const servedYears = balanceYear - hireDate.getUTCFullYear();
+
+  if (servedYears < 1) {
+    let months = (asOf.getUTCFullYear() - hireDate.getUTCFullYear()) * 12 + (asOf.getUTCMonth() - hireDate.getUTCMonth());
+    if (asOf.getUTCDate() < hireDate.getUTCDate()) months -= 1;
+    return Math.max(0, Math.min(months, 11)).toFixed(1);
+  }
+
+  const bonusSteps = Math.floor((servedYears - 1) / 2);
+  return Math.min(15 + bonusSteps, 25).toFixed(1);
+}
+
 async function main() {
   const facility = await prisma.facility.upsert({
     where: { id: 1n },
@@ -83,6 +105,7 @@ async function seedApprovalFixtures(facilityId: bigint) {
     '6': '666666',
     '7': '777777',
     '8': '888888',
+    '9': '999999',
   };
   const staffPinCredentials: Record<string, { pinHash: string }> = {};
   for (const [id, code] of Object.entries(staffPinCodes)) {
@@ -99,6 +122,8 @@ async function seedApprovalFixtures(facilityId: bigint) {
     { id: 6n, name: '한슬기', jobRole: 'NURSE_AIDE', systemRole: 'STAFF', hireDate: new Date('2022-02-07'), teamId: teams['2층팀'] },
     { id: 7n, name: '오다정', jobRole: 'CAREGIVER', systemRole: 'STAFF', hireDate: new Date('2018-11-12'), teamId: teams['2층팀'] },
     { id: 8n, name: '강마루', jobRole: 'CAREGIVER', systemRole: 'STAFF', hireDate: new Date('2023-06-19'), teamId: teams['2층팀'] },
+    // 입사 1년 미만(D-9 개근 개월 부여 케이스 확인용)
+    { id: 9n, name: '윤새봄', jobRole: 'CAREGIVER', systemRole: 'STAFF', hireDate: new Date('2026-03-02'), teamId: teams['2층팀'] },
   ] as const;
   for (const emp of employees) {
     // 로그인 계정은 update에도 넣는다 — 마이그레이션 이전에 만들어진 기존 행에도 반영되도록
@@ -127,19 +152,28 @@ async function seedApprovalFixtures(facilityId: bigint) {
   }
 
   // --- 잔여 (2026). reserved = 열린 신청(PENDING/INTERIM) 합계, used = 승인 확정분과 정합 ---
-  // remaining은 DB GENERATED 컬럼 — 쓰지 않는다
+  // granted는 입사일 기준 D-9 규칙으로 계산(calculateAnnualLeaveGrant). remaining은 DB GENERATED 컬럼 — 쓰지 않는다
+  const hireDatesById = new Map<bigint, Date>(employees.map((e) => [e.id, e.hireDate]));
+  const balanceYear = 2026;
   const leaveBalances = [
-    { employeeId: 4n, granted: '15.0', used: '0.0', reserved: '2.5' }, // 신청 1(2.0) + 6(0.5)
-    { employeeId: 5n, granted: '15.0', used: '1.0', reserved: '0.5' }, // 승인 7(1.0), 신청 2(0.5)
-    { employeeId: 6n, granted: '15.0', used: '1.0', reserved: '0.0' }, // 전결 승인 8(1.0)
-    { employeeId: 7n, granted: '15.0', used: '0.0', reserved: '0.0' },
-    { employeeId: 8n, granted: '15.0', used: '0.0', reserved: '1.0' }, // 신청 5(1.0)
-  ];
+    { employeeId: 1n, used: '0.0', reserved: '0.0' },
+    { employeeId: 2n, used: '0.0', reserved: '0.0' },
+    { employeeId: 3n, used: '0.0', reserved: '0.0' },
+    { employeeId: 4n, used: '0.0', reserved: '2.5' }, // 신청 1(2.0) + 6(0.5)
+    { employeeId: 5n, used: '1.0', reserved: '0.5' }, // 승인 7(1.0), 신청 2(0.5)
+    { employeeId: 6n, used: '1.0', reserved: '0.0' }, // 전결 승인 8(1.0)
+    { employeeId: 7n, used: '0.0', reserved: '0.0' },
+    { employeeId: 8n, used: '0.0', reserved: '1.0' }, // 신청 5(1.0)
+    { employeeId: 9n, used: '0.0', reserved: '0.0' }, // 입사 1년 미만 — 개근 개월 수 기준 부여
+  ].map((b) => ({
+    ...b,
+    granted: calculateAnnualLeaveGrant(hireDatesById.get(b.employeeId)!, balanceYear, AS_OF_DATE),
+  }));
   for (const b of leaveBalances) {
     await prisma.leaveBalance.upsert({
-      where: { employeeId_balanceYear: { employeeId: b.employeeId, balanceYear: 2026 } },
+      where: { employeeId_balanceYear: { employeeId: b.employeeId, balanceYear } },
       update: {},
-      create: { balanceYear: 2026, ...b },
+      create: { balanceYear, ...b },
     });
   }
   // 유대 잔여(1일 단위 사용 트랙 — D-15). 신청 4(1.0)가 대기 중
