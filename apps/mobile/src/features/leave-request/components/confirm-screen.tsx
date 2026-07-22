@@ -13,6 +13,8 @@ export function ConfirmScreen({
   todayOfMonth,
   balance,
   subBalance,
+  submitting,
+  submitError,
   onBack,
   onSubmit,
 }: {
@@ -22,8 +24,10 @@ export function ConfirmScreen({
   todayOfMonth: number
   balance: number
   subBalance: number
+  submitting: boolean
+  submitError: string | null
   onBack: () => void
-  onSubmit: (postApply: boolean) => void
+  onSubmit: () => void
 }) {
   const isSub = type === 'SUBSTITUTE_HOLIDAY'
   const count = selectedDays.length
@@ -85,18 +89,25 @@ export function ConfirmScreen({
       <div className="mt-3 rounded-2xl bg-muted px-4.5 py-3.5 text-base leading-relaxed text-secondary-foreground">
         사유를 꼭 적지 않아도 됩니다. 필요하면 관리자가 여쭤봅니다.
       </div>
+      {submitError ? (
+        <div className="mt-3 rounded-2xl bg-reject/10 px-4.5 py-3.5 text-base leading-relaxed text-reject">
+          {submitError}
+        </div>
+      ) : null}
 
       <div className="mt-auto flex flex-col gap-2.5 pt-4">
         <Button
-          onClick={() => onSubmit(postApply)}
+          onClick={onSubmit}
+          disabled={submitting}
           className="h-auto w-full items-center justify-center gap-2 rounded-3xl bg-primary py-6 text-xl font-black text-primary-foreground shadow-lg hover:bg-primary/90"
         >
-          신청하기
-          <ArrowRight className="size-6" />
+          {submitting ? '신청하는 중…' : '신청하기'}
+          {submitting ? null : <ArrowRight className="size-6" />}
         </Button>
         <Button
           variant="outline"
           onClick={onBack}
+          disabled={submitting}
           className="h-auto w-full rounded-3xl border-2 py-4.5 text-lg font-bold text-secondary-foreground"
         >
           다시 고치기

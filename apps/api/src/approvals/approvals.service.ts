@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { ApprovalRequestStatus, Prisma } from '@prisma/client';
+import { ApprovalRequestStatus, ApprovalRequestType, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { InboxStatusFilter } from './dto/inbox-query.dto';
 import {
@@ -189,6 +189,10 @@ export class ApprovalsService {
 
       if (isFinal) {
         await this.settleBalance(tx, req, 'APPROVE');
+        // 취소 요청(D-6/취소 승인) 자체가 최종 승인되면 원건을 CANCELED로 전환한다
+        if (req.type === ApprovalRequestType.CANCEL && req.refRequestId) {
+          await this.applyCancellation(tx, req.refRequestId, actorId);
+        }
       }
 
       return this.readDetail(tx, requestId);
@@ -266,7 +270,63 @@ export class ApprovalsService {
     if (!OPEN_STATUSES.includes(req.status)) {
       throw this.conflict('ALREADY_FINALIZED');
     }
+    // 이 건을 대상으로 한 취소 요청(type=CANCEL)이 결재 진행 중이면 원건 자체의 승인/반려를
+    // 차단한다 — 취소 결과가 정해지기 전까지 원건 상태가 갈라지는 것을 막는다(leave.service.ts
+    // createCancellationRequest 참고).
+    const pendingCancellation = await tx.approvalRequest.findFirst({
+      where: {
+        refRequestId: requestId,
+        type: ApprovalRequestType.CANCEL,
+        status: { in: OPEN_STATUSES },
+      },
+    });
+    if (pendingCancellation) {
+      throw this.conflict('CANCELLATION_PENDING');
+    }
     return req;
+  }
+
+  /// 취소 요청(type=CANCEL)이 최종 승인되면 원건(refRequestId)을 CANCELED로 전환하고
+  /// reserved를 반환한다. 원건이 이미 다른 경로로 종결됐다면(방어적) 아무 것도 하지 않는다.
+  private async applyCancellation(
+    tx: Prisma.TransactionClient,
+    refRequestId: bigint,
+    actorId: bigint,
+  ): Promise<void> {
+    const original = await tx.approvalRequest.findUnique({
+      where: { id: refRequestId },
+      include: { targetDates: true },
+    });
+    if (!original || !OPEN_STATUSES.includes(original.status)) {
+      return;
+    }
+
+    await tx.approvalRequest.update({
+      where: { id: refRequestId },
+      data: { status: ApprovalRequestStatus.CANCELED, finalizedAt: new Date() },
+    });
+
+    await tx.approvalHistory.create({
+      data: { requestId: refRequestId, actorId, action: 'CANCEL' },
+    });
+
+    if (original.leaveDays === null) return;
+    const firstDate = original.targetDates[0]?.targetDate ?? original.createdAt;
+    const balanceYear = firstDate.getUTCFullYear();
+    const where = {
+      employeeId_balanceYear: { employeeId: original.requesterId, balanceYear },
+    };
+    if (original.type === ApprovalRequestType.SUBSTITUTE_HOLIDAY) {
+      await tx.substituteHolidayBalance.update({
+        where,
+        data: { reserved: { decrement: original.leaveDays } },
+      });
+    } else {
+      await tx.leaveBalance.update({
+        where,
+        data: { reserved: { decrement: original.leaveDays } },
+      });
+    }
   }
 
   private resolveCurrentStep(
@@ -420,6 +480,7 @@ export class ApprovalsService {
         '이미 종결되었거나 다른 결재자가 먼저 처리한 건입니다.',
       NOT_YOUR_STEP: '현재 단계를 결재할 권한이 없습니다.',
       SELF_APPROVAL_FORBIDDEN: '자기결재는 금지되어 있습니다.',
+      CANCELLATION_PENDING: '취소 승인이 진행 중이라 처리할 수 없습니다.',
     };
     return new ConflictException({
       code,

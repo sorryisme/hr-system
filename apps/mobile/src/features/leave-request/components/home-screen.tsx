@@ -1,21 +1,20 @@
 import { ArrowRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { MOCK_EMPLOYEE_NAME } from '../mock-data'
 import type { LeaveRequest } from '../types'
 import { RequestCard } from './request-card'
 
 export function HomeScreen({
+  employeeName,
   balance,
   subBalance,
   recentRequests,
-  month,
   onStartApply,
   onGoStatus,
 }: {
+  employeeName: string
   balance: number
   subBalance: number
   recentRequests: LeaveRequest[]
-  month: number
   onStartApply: () => void
   onGoStatus: () => void
 }) {
@@ -23,7 +22,7 @@ export function HomeScreen({
     <div className="flex flex-1 flex-col gap-6 p-5">
       <div>
         <p className="text-lg text-muted-foreground">안녕하세요,</p>
-        <p className="text-3xl font-black">{MOCK_EMPLOYEE_NAME}</p>
+        <p className="text-3xl font-black">{employeeName}</p>
       </div>
 
       <div className="flex gap-3">
@@ -63,7 +62,7 @@ export function HomeScreen({
         </div>
         <div className="flex flex-col gap-3">
           {recentRequests.map((req) => (
-            <RequestCard key={req.id} request={req} month={month} />
+            <RequestCard key={req.id} request={req} />
           ))}
         </div>
       </div>

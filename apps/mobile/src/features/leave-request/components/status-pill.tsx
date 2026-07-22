@@ -32,3 +32,15 @@ export function PostApplyPill() {
     </Badge>
   )
 }
+
+/** 1차 이상 승인된 건의 취소 요청이 관리자 승인을 기다리는 중임을 표시 */
+export function CancellationPendingPill() {
+  return (
+    <Badge
+      variant="outline"
+      className="h-auto rounded-full border-transparent bg-brand/15 px-2.5 py-1 text-sm font-bold text-brand"
+    >
+      취소 승인 대기중
+    </Badge>
+  )
+}

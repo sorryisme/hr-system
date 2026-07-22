@@ -1,33 +1,53 @@
 import { useState } from 'react'
-import { deductAmount } from './domain'
-import { MOCK_INITIAL_BALANCE, MOCK_INITIAL_SUB_BALANCE, MOCK_REQUESTS } from './mock-data'
-import type { LeaveRequest, LeaveRequestType, Screen } from './types'
+import { useQueryClient } from '@tanstack/react-query'
+import {
+  getGetBalanceQueryKey,
+  getGetMyRequestsQueryKey,
+  useCancelRequest,
+  useSubmitRequest,
+} from '@/api/generated/endpoints'
+import { ApiError } from '@/api/mutator'
+import { toIsoDate } from './domain'
+import type { LeaveRequestType, Screen } from './types'
 
 interface State {
   screen: Screen
   selectedDays: number[]
   selectedType: LeaveRequestType | null
-  balance: number
-  subBalance: number
-  requests: LeaveRequest[]
   blockedMessage: string | null
+  submitError: string | null
+  cancelMessage: string | null
 }
 
 const initialState: State = {
   screen: 'home',
   selectedDays: [],
   selectedType: null,
-  balance: MOCK_INITIAL_BALANCE,
-  subBalance: MOCK_INITIAL_SUB_BALANCE,
-  requests: MOCK_REQUESTS,
   blockedMessage: null,
+  submitError: null,
+  cancelMessage: null,
 }
 
+/**
+ * 화면 전환·선택 상태만 로컬로 관리한다. 연차 잔여·신청 목록은 이 훅이 들고 있지 않고
+ * GET /leave/balance, GET /leave/requests 조회 결과를 그대로 props로 받아 쓴다(leave-request-page.tsx) —
+ * submit()/cancelRequest()가 실제로 서버에 반영되므로, 반영 후에는 재조회로 최신값을 받는다.
+ */
 export function useLeaveRequest() {
   const [state, setState] = useState<State>(initialState)
+  const queryClient = useQueryClient()
+  const submitMutation = useSubmitRequest()
+  const cancelMutation = useCancelRequest()
 
   function resetWizard(screen: Screen) {
-    setState((s) => ({ ...s, screen, selectedDays: [], selectedType: null, blockedMessage: null }))
+    setState((s) => ({
+      ...s,
+      screen,
+      selectedDays: [],
+      selectedType: null,
+      blockedMessage: null,
+      submitError: null,
+    }))
   }
 
   function goHome() {
@@ -43,7 +63,7 @@ export function useLeaveRequest() {
   }
 
   function goStatus() {
-    setState((s) => ({ ...s, screen: 'status' }))
+    setState((s) => ({ ...s, screen: 'status', cancelMessage: null }))
   }
 
   function step1Next() {
@@ -65,56 +85,64 @@ export function useLeaveRequest() {
   }
 
   function pickType(type: LeaveRequestType) {
-    setState((s) => ({ ...s, selectedType: type, screen: 'step3' }))
+    setState((s) => ({ ...s, selectedType: type, screen: 'step3', submitError: null }))
   }
 
-  /** 신청 생성(PENDING) + 잔여 차감 + 완료 화면. 진동 피드백(N-6) */
-  function submit(postApply: boolean) {
-    if (navigator.vibrate) navigator.vibrate([30, 40, 30])
-    setState((s) => {
-      if (!s.selectedType) return s
-      const type = s.selectedType
-      const days = [...s.selectedDays].sort((a, b) => a - b)
-      const newRequest: LeaveRequest = {
-        id: crypto.randomUUID(),
-        status: 'PENDING',
-        type,
-        days,
-        reason: null,
-        postApply,
-      }
-      const subBalance = type === 'SUBSTITUTE_HOLIDAY' ? s.subBalance - 1 : s.subBalance
-      const balance =
-        type === 'SUBSTITUTE_HOLIDAY'
-          ? s.balance
-          : +(s.balance - deductAmount(type, days.length)).toFixed(1)
-      return {
-        ...s,
-        screen: 'done',
-        requests: [newRequest, ...s.requests],
-        balance,
-        subBalance,
-      }
-    })
+  async function invalidateLeaveQueries() {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: getGetBalanceQueryKey() }),
+      queryClient.invalidateQueries({ queryKey: getGetMyRequestsQueryKey() }),
+    ])
   }
 
-  /** 대기 건 취소: 목록에서 제거 + 차감했던 잔여 복원 (US-03) */
-  function cancelRequest(id: string) {
-    setState((s) => {
-      const req = s.requests.find((r) => r.id === id)
-      if (!req || req.status !== 'PENDING') return s
-      const requests = s.requests.filter((r) => r.id !== id)
-      const subBalance = req.type === 'SUBSTITUTE_HOLIDAY' ? s.subBalance + 1 : s.subBalance
-      const balance =
-        req.type === 'SUBSTITUTE_HOLIDAY'
-          ? s.balance
-          : +(s.balance + deductAmount(req.type, req.days.length)).toFixed(1)
-      return { ...s, requests, balance, subBalance }
-    })
+  /** 신청 제출(POST /leave/requests) → 잔여·목록 재조회 → 완료 화면. 진동 피드백(N-6) */
+  async function submit() {
+    if (!state.selectedType) return
+    const type = state.selectedType
+    const now = new Date()
+    const targetDates = [...state.selectedDays]
+      .sort((a, b) => a - b)
+      .map((day) => toIsoDate(now.getFullYear(), now.getMonth() + 1, day))
+
+    try {
+      await submitMutation.mutateAsync({
+        data: { type, targetDates, idempotencyKey: crypto.randomUUID() },
+      })
+      if (navigator.vibrate) navigator.vibrate([30, 40, 30])
+      await invalidateLeaveQueries()
+      setState((s) => ({ ...s, screen: 'done', submitError: null }))
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : '신청에 실패했어요. 다시 시도해 주세요.'
+      setState((s) => ({ ...s, submitError: message }))
+    }
   }
+
+  /**
+   * 대기 건 취소(POST /leave/requests/:id/cancel) → 목록 재조회 (US-03).
+   * PENDING 건은 즉시 취소되지만, 1차 이상 승인된 건은 관리자 승인이 필요한 취소 요청만
+   * 접수된다(result: CANCELLATION_REQUESTED) — 목록에서 바로 사라지지 않으므로 안내 메시지를 띄운다.
+   */
+  async function cancelRequest(id: string) {
+    try {
+      const response = await cancelMutation.mutateAsync({ id })
+      await invalidateLeaveQueries()
+      const cancelMessage =
+        response.data.result === 'CANCELLATION_REQUESTED'
+          ? '취소 요청을 접수했어요. 관리자 승인 후 취소돼요.'
+          : null
+      setState((s) => ({ ...s, cancelMessage }))
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : '취소에 실패했어요. 다시 시도해 주세요.'
+      setState((s) => ({ ...s, cancelMessage: message }))
+    }
+  }
+
+  const cancelingId = cancelMutation.isPending ? cancelMutation.variables?.id : undefined
 
   return {
     state,
+    submitting: submitMutation.isPending,
+    cancelingId,
     actions: {
       goHome,
       startApply,
