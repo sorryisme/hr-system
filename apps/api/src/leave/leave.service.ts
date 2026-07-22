@@ -124,18 +124,20 @@ export class LeaveService {
     facilityId: bigint,
     dto: CreateLeaveRequestDto,
   ): Promise<MyLeaveRequestDto> {
+    const targetDates = [...new Set(dto.targetDates)].sort();
+
     if (dto.idempotencyKey) {
       const existing = await this.prisma.approvalRequest.findUnique({
         where: { idempotencyKey: dto.idempotencyKey },
         include: { targetDates: { orderBy: { targetDate: 'asc' } } },
       });
       if (existing) {
+        this.assertIdempotentReplayMatches(existing, employeeId, facilityId, dto.type, targetDates);
         const pending = await this.findPendingCancellationRefIds(this.prisma, [existing.id]);
         return this.toMyRequest(existing, pending.has(existing.id));
       }
     }
 
-    const targetDates = [...new Set(dto.targetDates)].sort();
     if (
       dto.type !== ApprovalRequestType.ANNUAL &&
       targetDates.length > 1
@@ -277,6 +279,33 @@ export class LeaveService {
   // ---------------------------------------------------------------
   // 내부 유틸
   // ---------------------------------------------------------------
+
+  /// idempotencyKey로 찾은 기존 건이 이번 요청과 실제로 같은 제출인지 검증한다.
+  /// 다른 사용자·시설의 키이거나 같은 사용자가 다른 내용(유형·날짜)으로 키를 재사용하면
+  /// 그 건을 그대로 반환하지 않고 거부한다 — 더블탭으로 인한 동일 재시도만 통과시키기 위함.
+  private assertIdempotentReplayMatches(
+    existing: RequestRow,
+    employeeId: bigint,
+    facilityId: bigint,
+    type: ApprovalRequestType,
+    targetDates: string[],
+  ): void {
+    const existingDates = existing.targetDates
+      .map((d) => d.targetDate.toISOString().slice(0, 10))
+      .sort();
+    const matches =
+      existing.requesterId === employeeId &&
+      existing.facilityId === facilityId &&
+      existing.type === type &&
+      targetDates.length === existingDates.length &&
+      targetDates.every((d, i) => d === existingDates[i]);
+    if (!matches) {
+      throw new ConflictException({
+        code: 'IDEMPOTENCY_KEY_REUSE',
+        message: '이미 다른 요청에 사용된 키입니다.',
+      });
+    }
+  }
 
   /// D-2 이중신청 차단: 본인의 진행 중·승인 완료 건과 날짜가 겹치면 거부
   private async assertNoOverlap(

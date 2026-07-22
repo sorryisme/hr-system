@@ -191,15 +191,20 @@ describe('LeaveService', () => {
       targetDates: ['2026-07-21', '2026-07-22'],
     };
 
-    it('idempotencyKey가 이미 존재하면 새로 만들지 않고 기존 건을 반환한다', async () => {
+    it('idempotencyKey가 이미 존재하고 같은 사용자·내용이면 새로 만들지 않고 기존 건을 반환한다', async () => {
       const existing = {
         id: 5n,
+        facilityId: 1n,
+        requesterId: 4n,
         type: ApprovalRequestType.ANNUAL,
         status: ApprovalRequestStatus.PENDING,
         reason: null,
         isRetroactive: false,
         createdAt: new Date('2026-07-15T09:12:00Z'),
-        targetDates: [{ targetDate: new Date('2026-07-21T00:00:00Z') }],
+        targetDates: [
+          { targetDate: new Date('2026-07-21T00:00:00Z') },
+          { targetDate: new Date('2026-07-22T00:00:00Z') },
+        ],
       };
       prisma.approvalRequest.findUnique.mockResolvedValue(existing);
       prisma.approvalRequest.findMany.mockResolvedValueOnce([]); // 취소 요청 진행 여부 조회 — 없음
@@ -210,6 +215,49 @@ describe('LeaveService', () => {
       });
 
       expect(result.id).toBe('5');
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('idempotencyKey가 다른 사용자 소유면 그 건을 반환하지 않고 거부한다', async () => {
+      const existing = {
+        id: 5n,
+        facilityId: 1n,
+        requesterId: 999n, // 다른 사용자
+        type: ApprovalRequestType.ANNUAL,
+        status: ApprovalRequestStatus.PENDING,
+        reason: null,
+        isRetroactive: false,
+        createdAt: new Date('2026-07-15T09:12:00Z'),
+        targetDates: [
+          { targetDate: new Date('2026-07-21T00:00:00Z') },
+          { targetDate: new Date('2026-07-22T00:00:00Z') },
+        ],
+      };
+      prisma.approvalRequest.findUnique.mockResolvedValue(existing);
+
+      await expect(
+        service.submitRequest(4n, 1n, { ...dto, idempotencyKey: 'a0000000-0000-0000-0000-000000000000' }),
+      ).rejects.toThrow(ConflictException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('같은 사용자가 같은 키를 다른 내용으로 재사용하면 거부한다', async () => {
+      const existing = {
+        id: 5n,
+        facilityId: 1n,
+        requesterId: 4n,
+        type: ApprovalRequestType.ANNUAL,
+        status: ApprovalRequestStatus.PENDING,
+        reason: null,
+        isRetroactive: false,
+        createdAt: new Date('2026-07-15T09:12:00Z'),
+        targetDates: [{ targetDate: new Date('2026-07-01T00:00:00Z') }], // 이번 요청과 다른 날짜
+      };
+      prisma.approvalRequest.findUnique.mockResolvedValue(existing);
+
+      await expect(
+        service.submitRequest(4n, 1n, { ...dto, idempotencyKey: 'a0000000-0000-0000-0000-000000000000' }),
+      ).rejects.toThrow(ConflictException);
       expect(prisma.$transaction).not.toHaveBeenCalled();
     });
 
