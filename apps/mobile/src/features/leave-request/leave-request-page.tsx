@@ -1,13 +1,79 @@
+import { useGetBalance, useGetMyRequests } from '@/api/generated/endpoints'
+import type { MyLeaveRequestDto } from '@/api/generated/model'
+import { getSessionUser } from '@/features/auth/session'
 import { ConfirmScreen } from './components/confirm-screen'
 import { DateSelectScreen } from './components/date-select-screen'
 import { DoneScreen } from './components/done-screen'
 import { HomeScreen } from './components/home-screen'
 import { StatusScreen } from './components/status-screen'
 import { TypeSelectScreen } from './components/type-select-screen'
+import type { LeaveRequest, LeaveRequestStatus, LeaveRequestType } from './types'
 import { useLeaveRequest } from './use-leave-request'
 
+function toLeaveRequestStatus(status: MyLeaveRequestDto['status']): LeaveRequestStatus {
+  if (status === 'APPROVED') return 'APPROVED'
+  if (status === 'REJECTED') return 'REJECTED'
+  return 'PENDING' // PENDING · INTERIM_APPROVED — 결재 진행 중은 모두 대기중으로 표시
+}
+
+function toLeaveRequest(dto: MyLeaveRequestDto): LeaveRequest {
+  return {
+    id: dto.id,
+    status: toLeaveRequestStatus(dto.status),
+    type: dto.type as LeaveRequestType,
+    dates: dto.targetDates,
+    reason: dto.reason,
+    postApply: dto.isRetroactive,
+    pendingCancellation: dto.pendingCancellation,
+  }
+}
+
 export function LeaveRequestPage() {
-  const { state, actions } = useLeaveRequest()
+  const balanceQuery = useGetBalance()
+  const requestsQuery = useGetMyRequests()
+
+  if (balanceQuery.isPending || requestsQuery.isPending) {
+    return (
+      <div className="flex flex-1 items-center justify-center p-5">
+        <p className="text-lg text-muted-foreground">불러오는 중이에요…</p>
+      </div>
+    )
+  }
+
+  if (balanceQuery.isError || requestsQuery.isError) {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center gap-3 p-5 text-center">
+        <p className="text-lg font-bold text-reject">연차 정보를 불러오지 못했어요</p>
+        <p className="text-base text-muted-foreground">잠시 후 다시 시도해 주세요</p>
+      </div>
+    )
+  }
+
+  const balance = balanceQuery.data.data
+  const requests = requestsQuery.data.data
+
+  return (
+    <LeaveRequestScreens
+      employeeName={getSessionUser()?.name ?? ''}
+      balance={Number(balance.annual.remaining)}
+      subBalance={Number(balance.substituteHoliday.remaining)}
+      requests={requests.map(toLeaveRequest)}
+    />
+  )
+}
+
+function LeaveRequestScreens({
+  employeeName,
+  balance,
+  subBalance,
+  requests,
+}: {
+  employeeName: string
+  balance: number
+  subBalance: number
+  requests: LeaveRequest[]
+}) {
+  const { state, submitting, cancelingId, actions } = useLeaveRequest()
 
   const now = new Date()
   const year = now.getFullYear()
@@ -20,10 +86,10 @@ export function LeaveRequestPage() {
     case 'home':
       return (
         <HomeScreen
-          balance={state.balance}
-          subBalance={state.subBalance}
-          recentRequests={state.requests.slice(0, 2)}
-          month={month}
+          employeeName={employeeName}
+          balance={balance}
+          subBalance={subBalance}
+          recentRequests={requests.slice(0, 2)}
           onStartApply={actions.startApply}
           onGoStatus={actions.goStatus}
         />
@@ -37,7 +103,7 @@ export function LeaveRequestPage() {
           daysInMonth={daysInMonth}
           firstWeekday={firstWeekday}
           selectedDays={state.selectedDays}
-          requests={state.requests}
+          requests={requests}
           blockedMessage={state.blockedMessage}
           onBack={actions.goHome}
           onToggleDay={actions.toggleDay}
@@ -49,8 +115,8 @@ export function LeaveRequestPage() {
       return (
         <TypeSelectScreen
           selectedDayCount={state.selectedDays.length}
-          balance={state.balance}
-          subBalance={state.subBalance}
+          balance={balance}
+          subBalance={subBalance}
           onBack={actions.goStep1}
           onPick={actions.pickType}
         />
@@ -63,8 +129,10 @@ export function LeaveRequestPage() {
           selectedDays={state.selectedDays}
           month={month}
           todayOfMonth={todayOfMonth}
-          balance={state.balance}
-          subBalance={state.subBalance}
+          balance={balance}
+          subBalance={subBalance}
+          submitting={submitting}
+          submitError={state.submitError}
           onBack={actions.goStep1}
           onSubmit={actions.submit}
         />
@@ -74,8 +142,9 @@ export function LeaveRequestPage() {
     case 'status':
       return (
         <StatusScreen
-          requests={state.requests}
-          month={month}
+          requests={requests}
+          cancelingId={cancelingId}
+          cancelMessage={state.cancelMessage}
           onBack={actions.goHome}
           onCancel={actions.cancelRequest}
         />

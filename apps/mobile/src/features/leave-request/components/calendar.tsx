@@ -1,13 +1,14 @@
 import { cn } from '@/lib/utils'
-import { blockedDaySet } from '../domain'
+import { blockedDaySet, toIsoDate } from '../domain'
 import { STATUS_LABELS, TYPE_LABELS } from '../labels'
 import type { LeaveRequest } from '../types'
 
 const DOW_LABELS = ['일', '월', '화', '수', '목', '금', '토']
 
-function blockedLabel(day: number, requests: LeaveRequest[], month: number): string {
+function blockedLabel(day: number, requests: LeaveRequest[], year: number, month: number): string {
+  const iso = toIsoDate(year, month, day)
   const req = requests.find(
-    (r) => (r.status === 'PENDING' || r.status === 'APPROVED') && r.days.includes(day),
+    (r) => (r.status === 'PENDING' || r.status === 'APPROVED') && r.dates.includes(iso),
   )
   const what = req ? `${TYPE_LABELS[req.type].name} · ${STATUS_LABELS[req.status]}` : '기존 신청'
   return `${month}월 ${day}일은 이미 신청한 날이에요 (${what})`
@@ -34,7 +35,7 @@ export function CalendarGrid({
   onToggleDay: (day: number) => void
   onBlockedDay: (message: string) => void
 }) {
-  const blocked = blockedDaySet(requests)
+  const blocked = blockedDaySet(requests, year, month)
 
   return (
     <div className="rounded-3xl border-2 border-border bg-card p-4">
@@ -76,7 +77,7 @@ export function CalendarGrid({
               key={day}
               type="button"
               onClick={() =>
-                isBlocked ? onBlockedDay(blockedLabel(day, requests, month)) : onToggleDay(day)
+                isBlocked ? onBlockedDay(blockedLabel(day, requests, year, month)) : onToggleDay(day)
               }
               className={cn(
                 'flex h-13.5 items-center justify-center rounded-2xl text-xl font-bold transition-colors',

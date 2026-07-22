@@ -5,12 +5,14 @@ import { RequestCard } from './request-card'
 
 export function StatusScreen({
   requests,
-  month,
+  cancelingId,
+  cancelMessage,
   onBack,
   onCancel,
 }: {
   requests: LeaveRequest[]
-  month: number
+  cancelingId: string | undefined
+  cancelMessage: string | null
   onBack: () => void
   onCancel: (id: string) => void
 }) {
@@ -27,6 +29,11 @@ export function StatusScreen({
         </Button>
         <span className="text-xl font-black">내 신청 현황</span>
       </div>
+      {cancelMessage ? (
+        <div className="mt-3 rounded-2xl bg-brand/10 px-4 py-3 text-center text-base font-bold text-brand">
+          {cancelMessage}
+        </div>
+      ) : null}
       <div className="mt-5 flex flex-col gap-3.5">
         {requests.length === 0 ? (
           <p className="py-10 text-center text-base text-muted-foreground">
@@ -34,7 +41,12 @@ export function StatusScreen({
           </p>
         ) : (
           requests.map((req) => (
-            <RequestCard key={req.id} request={req} month={month} onCancel={onCancel} />
+            <RequestCard
+              key={req.id}
+              request={req}
+              onCancel={onCancel}
+              isCanceling={cancelingId === req.id}
+            />
           ))
         )}
       </div>
