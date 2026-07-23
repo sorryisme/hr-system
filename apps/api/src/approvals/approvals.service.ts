@@ -21,6 +21,12 @@ const OPEN_STATUSES: ApprovalRequestStatus[] = [
   ApprovalRequestStatus.INTERIM_APPROVED,
 ];
 
+/// 취소 탭 = 종결된 취소 건 전체
+const CANCELED_STATUSES: ApprovalRequestStatus[] = [
+  ApprovalRequestStatus.CANCELED,
+  ApprovalRequestStatus.CANCELED_AFTER_APPROVAL,
+];
+
 const listInclude = {
   requester: { select: { id: true, name: true, jobRole: true } },
   desiredShift: { select: { id: true, label: true } },
@@ -65,15 +71,18 @@ export class ApprovalsService {
   async listRequests(
     filter: InboxStatusFilter,
   ): Promise<RequestListResponseDto> {
-    const where: Prisma.ApprovalRequestWhereInput =
-      filter === InboxStatusFilter.PENDING
-        ? { status: { in: OPEN_STATUSES } }
-        : {
-            status:
-              filter === InboxStatusFilter.APPROVED
-                ? ApprovalRequestStatus.APPROVED
-                : ApprovalRequestStatus.REJECTED,
-          };
+    const where: Prisma.ApprovalRequestWhereInput = (() => {
+      switch (filter) {
+        case InboxStatusFilter.PENDING:
+          return { status: { in: OPEN_STATUSES } };
+        case InboxStatusFilter.APPROVED:
+          return { status: ApprovalRequestStatus.APPROVED };
+        case InboxStatusFilter.REJECTED:
+          return { status: ApprovalRequestStatus.REJECTED };
+        case InboxStatusFilter.CANCELED:
+          return { status: { in: CANCELED_STATUSES } };
+      }
+    })();
 
     const [rows, grouped] = await Promise.all([
       this.prisma.approvalRequest.findMany({
@@ -87,7 +96,12 @@ export class ApprovalsService {
       }),
     ]);
 
-    const counts: InboxCountsDto = { pending: 0, approved: 0, rejected: 0 };
+    const counts: InboxCountsDto = {
+      pending: 0,
+      approved: 0,
+      rejected: 0,
+      canceled: 0,
+    };
     for (const g of grouped) {
       const n = g._count._all;
       if (OPEN_STATUSES.includes(g.status)) counts.pending += n;
@@ -95,6 +109,7 @@ export class ApprovalsService {
         counts.approved += n;
       else if (g.status === ApprovalRequestStatus.REJECTED)
         counts.rejected += n;
+      else if (CANCELED_STATUSES.includes(g.status)) counts.canceled += n;
     }
 
     return { items: rows.map((row) => this.toListItem(row)), counts };

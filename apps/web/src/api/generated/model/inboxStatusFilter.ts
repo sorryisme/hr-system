@@ -12,4 +12,5 @@ export const InboxStatusFilter = {
   PENDING: 'PENDING',
   APPROVED: 'APPROVED',
   REJECTED: 'REJECTED',
+  CANCELED: 'CANCELED',
 } as const;

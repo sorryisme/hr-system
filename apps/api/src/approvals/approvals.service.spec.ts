@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { JobRole, Prisma } from '@prisma/client';
 import { ApprovalsService } from './approvals.service';
+import { InboxStatusFilter } from './dto/inbox-query.dto';
 import { PrismaService } from '../prisma/prisma.service';
 
 // §3.4 상태머신 전이 규칙 검증. PrismaService는 트랜잭션 델리게이트 목으로 대체한다.
@@ -537,6 +538,49 @@ describe('ApprovalsService 상태머신', () => {
 
       expect(tx.approvalRequest.update).not.toHaveBeenCalled();
       expect(tx.leaveBalance.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('listRequests', () => {
+    const makePrisma = (grouped: { status: string; _count: { _all: number } }[]) => ({
+      approvalRequest: {
+        findMany: jest.fn().mockResolvedValue([]),
+        groupBy: jest.fn().mockResolvedValue(grouped),
+      },
+    });
+
+    it('CANCELED 필터는 CANCELED + CANCELED_AFTER_APPROVAL 상태를 조회한다', async () => {
+      const prisma = makePrisma([]);
+      const service = new ApprovalsService(prisma as unknown as PrismaService);
+
+      await service.listRequests(InboxStatusFilter.CANCELED);
+
+      expect(prisma.approvalRequest.findMany).toHaveBeenCalledWith(
+        containing({
+          where: { status: { in: ['CANCELED', 'CANCELED_AFTER_APPROVAL'] } },
+        }),
+      );
+    });
+
+    it('탭 카운트는 취소 건을 canceled로, 나머지는 기존대로 집계한다', async () => {
+      const prisma = makePrisma([
+        { status: 'PENDING', _count: { _all: 2 } },
+        { status: 'INTERIM_APPROVED', _count: { _all: 1 } },
+        { status: 'APPROVED', _count: { _all: 3 } },
+        { status: 'REJECTED', _count: { _all: 1 } },
+        { status: 'CANCELED', _count: { _all: 4 } },
+        { status: 'CANCELED_AFTER_APPROVAL', _count: { _all: 1 } },
+      ]);
+      const service = new ApprovalsService(prisma as unknown as PrismaService);
+
+      const result = await service.listRequests(InboxStatusFilter.CANCELED);
+
+      expect(result.counts).toEqual({
+        pending: 3,
+        approved: 3,
+        rejected: 1,
+        canceled: 5,
+      });
     });
   });
 });

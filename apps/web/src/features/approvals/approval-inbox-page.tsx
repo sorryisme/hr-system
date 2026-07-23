@@ -9,6 +9,7 @@ const TABS: { value: InboxStatusFilter; label: string }[] = [
   { value: InboxStatusFilter.PENDING, label: '대기' },
   { value: InboxStatusFilter.APPROVED, label: '승인' },
   { value: InboxStatusFilter.REJECTED, label: '반려' },
+  { value: InboxStatusFilter.CANCELED, label: '취소' },
 ]
 
 /** 관리자 웹 결재함(A-3) — 목업 1a: 목록 + 우측 상세 패널 분할형 */
@@ -23,7 +24,8 @@ export function ApprovalInboxPage() {
     if (!data) return null
     if (filter === InboxStatusFilter.PENDING) return data.counts.pending
     if (filter === InboxStatusFilter.APPROVED) return data.counts.approved
-    return data.counts.rejected
+    if (filter === InboxStatusFilter.REJECTED) return data.counts.rejected
+    return data.counts.canceled
   }
 
   return (
