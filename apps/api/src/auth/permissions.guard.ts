@@ -17,8 +17,22 @@ import { SessionUserDto } from './dto/session-user.dto';
  * 데코레이터·권한 문자열은 그대로 유지된다.
  */
 const ROLE_PERMISSIONS: Record<SystemRole, readonly string[]> = {
-  SUPER_ADMIN: ['approvals:read', 'approvals:decide'],
-  ADMIN: ['approvals:read', 'approvals:decide'],
+  // roster:write/close 는 §1.3상 사회복지사(작성) vs 사무국장·시설장(마감)로 나뉘나,
+  // system_role이 둘 다 ADMIN이라 현재는 동일 부여 — 세부 차등은 job_role 앱 레벨 검사 또는 RBAC 도입 시.
+  SUPER_ADMIN: [
+    'approvals:read',
+    'approvals:decide',
+    'roster:read',
+    'roster:write',
+    'roster:close',
+  ],
+  ADMIN: [
+    'approvals:read',
+    'approvals:decide',
+    'roster:read',
+    'roster:write',
+    'roster:close',
+  ],
   STAFF: [],
 };
 

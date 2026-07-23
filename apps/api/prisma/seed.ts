@@ -66,6 +66,7 @@ async function main() {
   }
 
   await seedApprovalFixtures(facility.id);
+  await seedRosterFixtures(facility.id);
 }
 
 // =============================================================
@@ -335,6 +336,151 @@ async function seedApprovalFixtures(facilityId: bigint) {
     await prisma.approvalRequest.create({ data });
   }
   console.log(`결재 픽스처 시드 완료: 신청 ${requests.length}건`);
+}
+
+// =============================================================
+// 근무표(Phase 2) 데모 픽스처 — 2026년 7월 (docs/mock-ui/근무표 재현)
+//   GET /rosters 응답 확인용. DDL v1.3 신설 필드(셀 시간 조정·유대 연동·결재 반영)를 시연한다.
+//   모든 인명은 가상 인물이며, 결재 픽스처의 직원(4~9)을 그대로 사용한다.
+// =============================================================
+
+/** @db.Time(0) 매핑용 — 1970-01-01T{hhmm}:00Z Date */
+const time = (hhmm: string) => new Date(`1970-01-01T${hhmm}:00Z`);
+
+async function seedRosterFixtures(facilityId: bigint) {
+  const YEAR = 2026;
+  const MONTH = 7; // 7월
+  const yearMonth = `${YEAR}-${String(MONTH).padStart(2, '0')}`;
+  const daysInMonth = new Date(Date.UTC(YEAR, MONTH, 0)).getUTCDate(); // 31
+
+  // 재시드 가드: 이미 셀이 있으면 통째로 건너뛴다(로컬 완전 재시드는 migrate reset — 운영 금지)
+  if ((await prisma.scheduleEntry.count()) > 0) {
+    console.log('schedule_entry에 데이터가 있어 근무표 픽스처 시드를 건너뜁니다.');
+    return;
+  }
+
+  // --- 월 근무표 헤더(DRAFT) ---
+  const roster = await prisma.roster.upsert({
+    where: { facilityId_yearMonth: { facilityId, yearMonth } },
+    update: {},
+    create: { facilityId, yearMonth, status: 'DRAFT' },
+  });
+
+  // --- 일별 적정 인원(§4.5, 시설 전체 기준). teamId=null은 Prisma 복합 unique upsert 불가 → findFirst 가드 ---
+  const staffingRules: Array<{ period: 'DAY' | 'NIGHT'; minCount: number }> = [
+    { period: 'DAY', minCount: 2 },
+    { period: 'NIGHT', minCount: 1 },
+  ];
+  for (const rule of staffingRules) {
+    const exists = await prisma.dailyStaffingRule.findFirst({
+      where: { facilityId, teamId: null, period: rule.period },
+    });
+    if (!exists) {
+      await prisma.dailyStaffingRule.create({
+        data: { facilityId, teamId: null, ...rule },
+      });
+    }
+  }
+
+  // --- 근무유형 코드 → id 맵 ---
+  const shiftTypeRows = await prisma.shiftType.findMany({
+    where: { facilityId },
+    select: { id: true, code: true },
+  });
+  const shiftId = new Map(shiftTypeRows.map((s) => [s.code, s.id]));
+
+  // --- 유대 관리대장 1건(§4.4) — SUB 셀의 "유(이월인정시간,분)" 표기 원천(v1.3 source_ledger_id) ---
+  const ledger = await prisma.substituteHolidayLedger.upsert({
+    where: {
+      employeeId_workedHolidayDate: {
+        employeeId: 7n,
+        workedHolidayDate: new Date('2026-07-06'),
+      },
+    },
+    update: {},
+    create: {
+      employeeId: 7n,
+      workedHolidayDate: new Date('2026-07-06'),
+      workedShift: 'DAY',
+      plannedUseDate: new Date('2026-07-20'),
+      plannedUseShift: 'DAY',
+      carryableMinutes: 150, // 유(2,30) 표기
+      createdBy: 2n,
+      source: 'MANUAL',
+    },
+  });
+
+  // --- 교대 직원 주간 패턴(dow 0=일 … 6=토). 'N'은 직원별 야간유형(N/NF)으로 확정 ---
+  const shiftEmployees = [
+    { id: 4n, nightType: 'N', pattern: ['D', 'D', 'N', 'N', 'OFF', 'OFF', 'D'] },
+    { id: 5n, nightType: 'N', pattern: ['N', 'N', 'OFF', 'D', 'D', 'D', 'OFF'] },
+    { id: 6n, nightType: 'D', pattern: ['D', 'D', 'OFF', 'D', 'D', 'OFF', 'D'] }, // 간호조무사(주간 위주)
+    { id: 7n, nightType: 'NF', pattern: ['N', 'N', 'N', 'OFF', 'OFF', 'N', 'N'] },
+    { id: 8n, nightType: 'N', pattern: ['OFF', 'D', 'D', 'N', 'N', 'OFF', 'D'] },
+    { id: 9n, nightType: 'NF', pattern: ['OFF', 'N', 'N', 'OFF', 'D', 'D', 'D'] },
+  ] as const;
+
+  // --- 동적 표기 예시(empId-day) — 결재 반영·시간 조정·유대 셀 시연 ---
+  type Override = {
+    code: string;
+    source: 'MANUAL' | 'APPROVAL';
+    sourceRequestId?: bigint;
+    sourceLedgerId?: bigint;
+    overrideStart?: string;
+    overrideEnd?: string;
+  };
+  const overrides: Record<string, Override> = {
+    // 승인된 연차(결재 #7·#8)의 근무표 확정 반영(source=APPROVAL)
+    '5-10': { code: 'AL', source: 'APPROVAL', sourceRequestId: 7n },
+    '6-8': { code: 'AL', source: 'APPROVAL', sourceRequestId: 8n },
+    // 셀 단위 근무시간 조정(§4.8) — "주(07:30~17:00)" 표기(v1.3 override_*)
+    '4-13': {
+      code: 'D',
+      source: 'MANUAL',
+      overrideStart: '07:30',
+      overrideEnd: '17:00',
+    },
+    // 유급휴일대체 사용 셀 — 대장 연동으로 "유(2,30)" 표기(v1.3 source_ledger_id)
+    '7-20': { code: 'SUB', source: 'APPROVAL', sourceLedgerId: ledger.id },
+    // 병가·결근은 관리자 직접 입력(D-18)
+    '8-16': { code: 'SICK', source: 'MANUAL' },
+  };
+
+  // --- 셀 생성 ---
+  let count = 0;
+  for (const emp of shiftEmployees) {
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dow = new Date(Date.UTC(YEAR, MONTH - 1, day)).getUTCDay();
+      const token = emp.pattern[dow];
+      let code: string = token === 'N' ? emp.nightType : token;
+      const ov = overrides[`${emp.id}-${day}`];
+      if (ov) code = ov.code;
+
+      const shiftTypeId = shiftId.get(code);
+      if (!shiftTypeId) throw new Error(`shift_type 코드 없음: ${code}`);
+
+      const workDate = new Date(
+        `${YEAR}-${String(MONTH).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
+      );
+      await prisma.scheduleEntry.upsert({
+        where: { employeeId_workDate: { employeeId: emp.id, workDate } },
+        update: {},
+        create: {
+          rosterId: roster.id,
+          employeeId: emp.id,
+          workDate,
+          shiftTypeId,
+          source: ov?.source ?? 'PRESET',
+          sourceRequestId: ov?.sourceRequestId ?? null,
+          sourceLedgerId: ov?.sourceLedgerId ?? null,
+          overrideStartTime: ov?.overrideStart ? time(ov.overrideStart) : null,
+          overrideEndTime: ov?.overrideEnd ? time(ov.overrideEnd) : null,
+        },
+      });
+      count++;
+    }
+  }
+  console.log(`근무표 픽스처 시드 완료: ${yearMonth} 셀 ${count}건`);
 }
 
 main()

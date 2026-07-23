@@ -4,8 +4,18 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { ApprovalRequestStatus, ApprovalRequestType, Prisma } from '@prisma/client';
+import {
+  ApprovalRequestStatus,
+  ApprovalRequestType,
+  Prisma,
+} from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { DomainEventBus } from '../events/domain-event-bus';
+import {
+  ApprovalReflectionPayload,
+  REQUEST_APPROVED,
+  REQUEST_STEP_APPROVED,
+} from '../events/domain-events';
 import { InboxStatusFilter } from './dto/inbox-query.dto';
 import {
   EmployeeSummaryDto,
@@ -66,7 +76,10 @@ type EmployeeRow = {
 
 @Injectable()
 export class ApprovalsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly bus: DomainEventBus,
+  ) {}
 
   async listRequests(
     filter: InboxStatusFilter,
@@ -138,7 +151,7 @@ export class ApprovalsService {
     const requestId = this.parseId(id);
     const actorId = this.parseId(approverId);
 
-    return this.prisma.$transaction(async (tx) => {
+    const outcome = await this.prisma.$transaction(async (tx) => {
       const req = await this.loadForTransition(tx, requestId);
       const { line, nextStepNo, totalSteps, isCurrentAssignee } =
         this.resolveCurrentStep(req, actorId);
@@ -210,8 +223,44 @@ export class ApprovalsService {
         }
       }
 
-      return this.readDetail(tx, requestId);
+      const detail = await this.readDetail(tx, requestId);
+      return { detail, req, isFinal, nextStepNo };
     });
+
+    // 근무표 반영 이벤트는 트랜잭션 커밋 이후에 발행한다(§2.3/§4.10 — 구독자가 확정된 상태를 읽도록).
+    // 최종 승인=REQUEST_APPROVED(확정 반영), 1차 승인=REQUEST_STEP_APPROVED(가반영).
+    this.publishApprovalEvent(outcome.req, outcome.isFinal, outcome.nextStepNo);
+    return outcome.detail;
+  }
+
+  /// 근무표 반영 구독자에게 필요한 최소 페이로드를 발행한다. 발행 실패가 결재 응답을 막지 않도록
+  /// 버스는 동기(in-process)지만 구독자 예외는 구독자 내부에서 격리한다(domain-event-bus 참고).
+  private publishApprovalEvent(
+    req: Prisma.ApprovalRequestGetPayload<{
+      include: { requestLines: true; targetDates: true };
+    }>,
+    isFinal: boolean,
+    nextStepNo: number,
+  ): void {
+    // 1차 승인에서만 가반영을 발행한다(중간 2차 승인은 근무표 이벤트 없음 — §4.10)
+    if (!isFinal && nextStepNo !== 1) return;
+
+    const payload: ApprovalReflectionPayload = {
+      requestId: req.id,
+      facilityId: req.facilityId,
+      requesterId: req.requesterId,
+      type: req.type,
+      targetDates: req.targetDates.map((d) =>
+        d.targetDate.toISOString().slice(0, 10),
+      ),
+      desiredShiftId: req.desiredShiftId,
+      desiredStartTime: req.desiredStartTime,
+      desiredEndTime: req.desiredEndTime,
+    };
+    this.bus.publish(
+      isFinal ? REQUEST_APPROVED : REQUEST_STEP_APPROVED,
+      payload,
+    );
   }
 
   async rejectRequest(
@@ -460,9 +509,9 @@ export class ApprovalsService {
     // CANCEL 유형은 같은 stepNo에 결재자 후보가 여러 행 있을 수 있다(누구든 결재
     // 가능 — leave.service.ts resolveCancellationRequestLines) — 단계별로 묶어
     // approvers 배열로 응답한다(일반 신청은 항상 후보 1명).
-    const stepNumbers = [...new Set(row.requestLines.map((l) => l.stepNo))].sort(
-      (a, b) => a - b,
-    );
+    const stepNumbers = [
+      ...new Set(row.requestLines.map((l) => l.stepNo)),
+    ].sort((a, b) => a - b);
     return {
       ...this.toListItem(row),
       finalizedAt: row.finalizedAt?.toISOString() ?? null,
@@ -471,7 +520,9 @@ export class ApprovalsService {
         return {
           stepNo,
           approvers: candidates.map((l) => this.toEmployee(l.approver)),
-          deputy: candidates[0].deputy ? this.toEmployee(candidates[0].deputy) : null,
+          deputy: candidates[0].deputy
+            ? this.toEmployee(candidates[0].deputy)
+            : null,
           delegationEnabled: candidates[0].delegationEnabled,
         };
       }),
