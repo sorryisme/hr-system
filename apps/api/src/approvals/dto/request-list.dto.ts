@@ -81,6 +81,10 @@ export class InboxCountsDto {
 
   @ApiProperty()
   rejected!: number;
+
+  /// CANCELED + CANCELED_AFTER_APPROVAL
+  @ApiProperty()
+  canceled!: number;
 }
 
 export class RequestListResponseDto {

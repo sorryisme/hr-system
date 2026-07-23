@@ -461,7 +461,8 @@
         "enum": [
           "PENDING",
           "APPROVED",
-          "REJECTED"
+          "REJECTED",
+          "CANCELED"
         ]
       },
       "EmployeeSummaryDto": {
@@ -618,12 +619,16 @@
           },
           "rejected": {
             "type": "number"
+          },
+          "canceled": {
+            "type": "number"
           }
         },
         "required": [
           "pending",
           "approved",
-          "rejected"
+          "rejected",
+          "canceled"
         ]
       },
       "RequestListResponseDto": {

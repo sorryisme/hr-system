@@ -11,6 +11,7 @@ import { ApiError } from '@/api/mutator'
 import { Button } from '@/components/ui/button'
 import { getSessionUser } from '@/features/auth/session'
 import { StatusBadge, TypeBadge } from './badges'
+import { ApprovalHistoryTimeline } from './approval-history-timeline'
 import { ApprovalStepper } from './approval-stepper'
 import { RejectForm } from './reject-form'
 import { SignatureBoxes } from './signature-boxes'
@@ -86,7 +87,6 @@ function RequestDetailContent({ requestId }: { requestId: string }) {
       ))
 
   const isOpen = detail?.status === 'PENDING' || detail?.status === 'INTERIM_APPROVED'
-  const rejectHistory = detail?.histories.find((h) => h.action === 'REJECT')
 
   // 임의 전결(D-13): 2차 단계의 결재자/대결자 본인만 선택 가능(서버 동일 검증).
   // 스냅샷 delegation ON이면 일반 승인이 이미 전결 확정이라 별도 버튼 불필요
@@ -157,15 +157,7 @@ function RequestDetailContent({ requestId }: { requestId: string }) {
 
           <ApprovalStepper detail={detail} />
           <SignatureBoxes detail={detail} />
-
-          {rejectHistory && (
-            <div className="rounded-xl border border-reject/30 bg-reject/5 px-4 py-3.5">
-              <div className="mb-1.5 text-[13px] font-bold text-reject">반려 사유</div>
-              <div className="text-sm leading-relaxed text-reject/90">
-                {rejectHistory.comment}
-              </div>
-            </div>
-          )}
+          <ApprovalHistoryTimeline detail={detail} />
 
           {actionError && (
             <div className="rounded-xl border border-reject/30 bg-reject/5 px-4 py-3 text-sm text-reject">

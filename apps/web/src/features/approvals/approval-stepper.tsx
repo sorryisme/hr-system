@@ -8,7 +8,7 @@ function approversLabel(line: RequestLineDto): string {
   return roles.join('/')
 }
 
-type StepState = 'done' | 'current' | 'upcoming' | 'rejected' | 'skipped'
+type StepState = 'done' | 'current' | 'upcoming' | 'rejected' | 'skipped' | 'canceled'
 
 function stepState(detail: RequestDetailDto, stepNo: number): StepState {
   if (stepNo <= detail.currentStep) return 'done'
@@ -19,6 +19,10 @@ function stepState(detail: RequestDetailDto, stepNo: number): StepState {
     // 전결 확정 시 남은 단계는 생략(D-13)
     return detail.isFinalByDelegation ? 'skipped' : 'done'
   }
+  // 취소 확정 건은 남은 단계가 대기 중인 것처럼 보이면 안 된다 — 그 단계에서 멈춘 것으로 표시
+  if (detail.status === 'CANCELED' || detail.status === 'CANCELED_AFTER_APPROVAL') {
+    return 'canceled'
+  }
   return stepNo === detail.currentStep + 1 ? 'current' : 'upcoming'
 }
 
@@ -28,6 +32,7 @@ const DOT_STYLES: Record<StepState, string> = {
   upcoming: 'bg-background border-border border-2',
   rejected: 'bg-reject border-reject',
   skipped: 'bg-paper-strong border-border border-2',
+  canceled: 'bg-paper-strong border-border border-2',
 }
 
 const STATE_LABELS: Record<StepState, string> = {
@@ -36,6 +41,7 @@ const STATE_LABELS: Record<StepState, string> = {
   upcoming: '예정',
   rejected: '반려',
   skipped: '전결 생략',
+  canceled: '취소로 종결',
 }
 
 /** 결재 단계 표시(dot + connector). 단계 수 1~3 가변(§3.1) */
@@ -74,7 +80,8 @@ export function ApprovalStepper({ detail }: { detail: RequestDetailDto }) {
                   state === 'done' && 'text-approve',
                   state === 'rejected' && 'text-reject',
                   state === 'current' && 'font-bold text-brand',
-                  (state === 'upcoming' || state === 'skipped') && 'text-muted-foreground',
+                  (state === 'upcoming' || state === 'skipped' || state === 'canceled') &&
+                    'text-muted-foreground',
                 )}
               >
                 {STATE_LABELS[state]}

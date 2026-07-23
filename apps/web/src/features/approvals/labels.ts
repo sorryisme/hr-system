@@ -1,4 +1,5 @@
 import type {
+  ApprovalAction,
   ApprovalRequestStatus,
   ApprovalRequestType,
   JobRole,
@@ -21,6 +22,13 @@ export const STATUS_LABELS: Record<ApprovalRequestStatus, string> = {
   REJECTED: '반려',
   CANCELED: '취소',
   CANCELED_AFTER_APPROVAL: '승인 후 취소',
+}
+
+export const ACTION_LABELS: Record<ApprovalAction, string> = {
+  SUBMIT: '제출',
+  APPROVE: '승인',
+  REJECT: '반려',
+  CANCEL: '취소',
 }
 
 export const JOB_ROLE_LABELS: Record<JobRole, string> = {
@@ -64,5 +72,8 @@ export function stageSummary(item: RequestListItemDto): string {
     return item.isFinalByDelegation ? '전결 승인' : '최종 승인'
   }
   if (item.status === 'REJECTED') return `${item.currentStep + 1}차 반려`
+  if (item.status === 'CANCELED' || item.status === 'CANCELED_AFTER_APPROVAL') {
+    return STATUS_LABELS[item.status]
+  }
   return `${item.currentStep}/${item.totalSteps} 단계 완료`
 }

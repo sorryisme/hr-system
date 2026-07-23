@@ -9,4 +9,5 @@ export interface InboxCountsDto {
   pending: number;
   approved: number;
   rejected: number;
+  canceled: number;
 }
