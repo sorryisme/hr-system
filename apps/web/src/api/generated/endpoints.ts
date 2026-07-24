@@ -26,16 +26,24 @@ import type {
 import type {
   ApproveRequestDto,
   CancelLeaveRequestResponseDto,
+  CloseRosterDto,
   CreateLeaveRequestDto,
+  CreateRoster200,
+  GetRosterParams,
   LeaveBalanceResponseDto,
   ListRequestsParams,
   LoginRequestDto,
   MyLeaveRequestDto,
   RegisterDeviceDto,
+  RejectCloseDto,
   RejectRequestDto,
   RequestDetailDto,
   RequestListResponseDto,
-  SessionUserDto
+  RosterQueryDto,
+  RosterResponseDto,
+  RosterTransitionResultDto,
+  SessionUserDto,
+  UpdateEntriesDto
 } from './model';
 
 import { customFetch } from '../mutator';
@@ -1246,4 +1254,583 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getCancelRequestMutationOptions(options), queryClient);
+    }
+
+export type getRosterResponse200 = {
+  data: RosterResponseDto
+  status: 200
+}
+
+export type getRosterResponseSuccess = (getRosterResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getRosterResponse = (getRosterResponseSuccess)
+
+export const getGetRosterUrl = (params: GetRosterParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/rosters?${stringifiedParams}` : `/api/rosters`
+}
+
+export const getRoster = async (params: GetRosterParams, options?: RequestInit): Promise<getRosterResponse> => {
+
+  return customFetch<getRosterResponse>(getGetRosterUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetRosterQueryKey = (params?: GetRosterParams,) => {
+    return [
+    `/api/rosters`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetRosterQueryOptions = <TData = Awaited<ReturnType<typeof getRoster>>, TError = unknown>(params: GetRosterParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRoster>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetRosterQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getRoster>>> = ({ signal }) => getRoster(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getRoster>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetRosterQueryResult = NonNullable<Awaited<ReturnType<typeof getRoster>>>
+export type GetRosterQueryError = unknown
+
+
+export function useGetRoster<TData = Awaited<ReturnType<typeof getRoster>>, TError = unknown>(
+ params: GetRosterParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRoster>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getRoster>>,
+          TError,
+          Awaited<ReturnType<typeof getRoster>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetRoster<TData = Awaited<ReturnType<typeof getRoster>>, TError = unknown>(
+ params: GetRosterParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRoster>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getRoster>>,
+          TError,
+          Awaited<ReturnType<typeof getRoster>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetRoster<TData = Awaited<ReturnType<typeof getRoster>>, TError = unknown>(
+ params: GetRosterParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRoster>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetRoster<TData = Awaited<ReturnType<typeof getRoster>>, TError = unknown>(
+ params: GetRosterParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRoster>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetRosterQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export type createRosterResponse200 = {
+  data: CreateRoster200
+  status: 200
+}
+
+export type createRosterResponseSuccess = (createRosterResponse200) & {
+  headers: Headers;
+};
+;
+
+export type createRosterResponse = (createRosterResponseSuccess)
+
+export const getCreateRosterUrl = () => {
+
+
+
+
+  return `/api/rosters`
+}
+
+export const createRoster = async (rosterQueryDto: RosterQueryDto, options?: RequestInit): Promise<createRosterResponse> => {
+
+  return customFetch<createRosterResponse>(getCreateRosterUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(rosterQueryDto)
+  }
+);}
+
+
+
+
+
+export const getCreateRosterMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createRoster>>, TError,{data: RosterQueryDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createRoster>>, TError,{data: RosterQueryDto}, TContext> => {
+
+const mutationKey = ['createRoster'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createRoster>>, {data: RosterQueryDto}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createRoster(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateRosterMutationResult = NonNullable<Awaited<ReturnType<typeof createRoster>>>
+    export type CreateRosterMutationBody = RosterQueryDto
+    export type CreateRosterMutationError = unknown
+
+    export const useCreateRoster = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createRoster>>, TError,{data: RosterQueryDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof createRoster>>,
+        TError,
+        {data: RosterQueryDto},
+        TContext
+      > => {
+      return useMutation(getCreateRosterMutationOptions(options), queryClient);
+    }
+
+export type updateEntriesResponse200 = {
+  data: RosterTransitionResultDto
+  status: 200
+}
+
+export type updateEntriesResponseSuccess = (updateEntriesResponse200) & {
+  headers: Headers;
+};
+;
+
+export type updateEntriesResponse = (updateEntriesResponseSuccess)
+
+export const getUpdateEntriesUrl = (id: string,) => {
+
+
+
+
+  return `/api/rosters/${id}/entries`
+}
+
+export const updateEntries = async (id: string,
+    updateEntriesDto: UpdateEntriesDto, options?: RequestInit): Promise<updateEntriesResponse> => {
+
+  return customFetch<updateEntriesResponse>(getUpdateEntriesUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(updateEntriesDto)
+  }
+);}
+
+
+
+
+
+export const getUpdateEntriesMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateEntries>>, TError,{id: string;data: UpdateEntriesDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateEntries>>, TError,{id: string;data: UpdateEntriesDto}, TContext> => {
+
+const mutationKey = ['updateEntries'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateEntries>>, {id: string;data: UpdateEntriesDto}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateEntries(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateEntriesMutationResult = NonNullable<Awaited<ReturnType<typeof updateEntries>>>
+    export type UpdateEntriesMutationBody = UpdateEntriesDto
+    export type UpdateEntriesMutationError = unknown
+
+    export const useUpdateEntries = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateEntries>>, TError,{id: string;data: UpdateEntriesDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof updateEntries>>,
+        TError,
+        {id: string;data: UpdateEntriesDto},
+        TContext
+      > => {
+      return useMutation(getUpdateEntriesMutationOptions(options), queryClient);
+    }
+
+export type completeResponse200 = {
+  data: RosterTransitionResultDto
+  status: 200
+}
+
+export type completeResponseSuccess = (completeResponse200) & {
+  headers: Headers;
+};
+;
+
+export type completeResponse = (completeResponseSuccess)
+
+export const getCompleteUrl = (id: string,) => {
+
+
+
+
+  return `/api/rosters/${id}/complete`
+}
+
+export const complete = async (id: string, options?: RequestInit): Promise<completeResponse> => {
+
+  return customFetch<completeResponse>(getCompleteUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getCompleteMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof complete>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof complete>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['complete'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof complete>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  complete(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CompleteMutationResult = NonNullable<Awaited<ReturnType<typeof complete>>>
+
+    export type CompleteMutationError = unknown
+
+    export const useComplete = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof complete>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof complete>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getCompleteMutationOptions(options), queryClient);
+    }
+
+export type submitCloseResponse200 = {
+  data: RosterTransitionResultDto
+  status: 200
+}
+
+export type submitCloseResponseSuccess = (submitCloseResponse200) & {
+  headers: Headers;
+};
+;
+
+export type submitCloseResponse = (submitCloseResponseSuccess)
+
+export const getSubmitCloseUrl = (id: string,) => {
+
+
+
+
+  return `/api/rosters/${id}/submit-close`
+}
+
+export const submitClose = async (id: string, options?: RequestInit): Promise<submitCloseResponse> => {
+
+  return customFetch<submitCloseResponse>(getSubmitCloseUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getSubmitCloseMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof submitClose>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof submitClose>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['submitClose'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof submitClose>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  submitClose(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SubmitCloseMutationResult = NonNullable<Awaited<ReturnType<typeof submitClose>>>
+
+    export type SubmitCloseMutationError = unknown
+
+    export const useSubmitClose = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof submitClose>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof submitClose>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getSubmitCloseMutationOptions(options), queryClient);
+    }
+
+export type closeResponse200 = {
+  data: RosterTransitionResultDto
+  status: 200
+}
+
+export type closeResponseSuccess = (closeResponse200) & {
+  headers: Headers;
+};
+;
+
+export type closeResponse = (closeResponseSuccess)
+
+export const getCloseUrl = (id: string,) => {
+
+
+
+
+  return `/api/rosters/${id}/close`
+}
+
+export const close = async (id: string,
+    closeRosterDto: CloseRosterDto, options?: RequestInit): Promise<closeResponse> => {
+
+  return customFetch<closeResponse>(getCloseUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(closeRosterDto)
+  }
+);}
+
+
+
+
+
+export const getCloseMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof close>>, TError,{id: string;data: CloseRosterDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof close>>, TError,{id: string;data: CloseRosterDto}, TContext> => {
+
+const mutationKey = ['close'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof close>>, {id: string;data: CloseRosterDto}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  close(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CloseMutationResult = NonNullable<Awaited<ReturnType<typeof close>>>
+    export type CloseMutationBody = CloseRosterDto
+    export type CloseMutationError = unknown
+
+    export const useClose = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof close>>, TError,{id: string;data: CloseRosterDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof close>>,
+        TError,
+        {id: string;data: CloseRosterDto},
+        TContext
+      > => {
+      return useMutation(getCloseMutationOptions(options), queryClient);
+    }
+
+export type rejectCloseResponse200 = {
+  data: RosterTransitionResultDto
+  status: 200
+}
+
+export type rejectCloseResponseSuccess = (rejectCloseResponse200) & {
+  headers: Headers;
+};
+;
+
+export type rejectCloseResponse = (rejectCloseResponseSuccess)
+
+export const getRejectCloseUrl = (id: string,) => {
+
+
+
+
+  return `/api/rosters/${id}/reject-close`
+}
+
+export const rejectClose = async (id: string,
+    rejectCloseDto: RejectCloseDto, options?: RequestInit): Promise<rejectCloseResponse> => {
+
+  return customFetch<rejectCloseResponse>(getRejectCloseUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(rejectCloseDto)
+  }
+);}
+
+
+
+
+
+export const getRejectCloseMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof rejectClose>>, TError,{id: string;data: RejectCloseDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof rejectClose>>, TError,{id: string;data: RejectCloseDto}, TContext> => {
+
+const mutationKey = ['rejectClose'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof rejectClose>>, {id: string;data: RejectCloseDto}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  rejectClose(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RejectCloseMutationResult = NonNullable<Awaited<ReturnType<typeof rejectClose>>>
+    export type RejectCloseMutationBody = RejectCloseDto
+    export type RejectCloseMutationError = unknown
+
+    export const useRejectClose = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof rejectClose>>, TError,{id: string;data: RejectCloseDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof rejectClose>>,
+        TError,
+        {id: string;data: RejectCloseDto},
+        TContext
+      > => {
+      return useMutation(getRejectCloseMutationOptions(options), queryClient);
     }

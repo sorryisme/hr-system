@@ -50,6 +50,23 @@
     --color-paper-strong: var(--paper-strong);
     --color-warning: var(--warning);
     --color-warning-foreground: var(--warning-foreground);
+    /* 근무표 셀 코드 색 (목업 근무표 승인.html 팔레트) — shiftCode 카테고리별 전경/배경 */
+    --color-shift-day: var(--shift-day);
+    --color-shift-day-bg: var(--shift-day-bg);
+    --color-shift-night: var(--shift-night);
+    --color-shift-night-bg: var(--shift-night-bg);
+    --color-shift-off: var(--shift-off);
+    --color-shift-off-bg: var(--shift-off-bg);
+    --color-shift-annual: var(--shift-annual);
+    --color-shift-annual-bg: var(--shift-annual-bg);
+    --color-shift-half: var(--shift-half);
+    --color-shift-half-bg: var(--shift-half-bg);
+    --color-shift-subhol: var(--shift-subhol);
+    --color-shift-subhol-bg: var(--shift-subhol-bg);
+    --color-shift-sick: var(--shift-sick);
+    --color-shift-sick-bg: var(--shift-sick-bg);
+    --color-shift-absent: var(--shift-absent);
+    --color-shift-absent-bg: var(--shift-absent-bg);
     --radius-sm: calc(var(--radius) * 0.6);
     --radius-md: calc(var(--radius) * 0.8);
     --radius-lg: var(--radius);
@@ -105,6 +122,24 @@
     /* 대시보드 도메인 토큰 (목업 대쉬보드.html 팔레트): warning=앰버, 위반 경고·소멸 임박 등 주의 상태 */
     --warning: oklch(0.6 0.15 75);
     --warning-foreground: oklch(0.985 0 0);
+    /* 근무표 셀 코드 팔레트 (라이트): 주=그린 / 야=네이비 / 휴=토프 / 연=앰버 / 반차=골드 /
+       유대=틸 / 병가=퍼플 / 결근=레드 */
+    --shift-day: oklch(0.48 0.08 168);
+    --shift-day-bg: oklch(0.93 0.03 168);
+    --shift-night: oklch(0.42 0.05 253);
+    --shift-night-bg: oklch(0.92 0.02 253);
+    --shift-off: oklch(0.55 0.02 80);
+    --shift-off-bg: oklch(0.93 0.008 80);
+    --shift-annual: oklch(0.55 0.11 62);
+    --shift-annual-bg: oklch(0.93 0.05 72);
+    --shift-half: oklch(0.58 0.1 78);
+    --shift-half-bg: oklch(0.95 0.05 85);
+    --shift-subhol: oklch(0.48 0.07 170);
+    --shift-subhol-bg: oklch(0.93 0.035 165);
+    --shift-sick: oklch(0.53 0.1 300);
+    --shift-sick-bg: oklch(0.93 0.04 300);
+    --shift-absent: oklch(0.5 0.17 28);
+    --shift-absent-bg: oklch(0.91 0.06 25);
 }
 
 .dark {
@@ -149,6 +184,23 @@
     --paper-strong: oklch(0.269 0 0);
     --warning: oklch(0.65 0.15 75);
     --warning-foreground: oklch(0.145 0 0);
+    /* 근무표 셀 코드 팔레트 (다크): 전경은 밝게, 배경은 어둡게 */
+    --shift-day: oklch(0.78 0.09 168);
+    --shift-day-bg: oklch(0.32 0.04 168);
+    --shift-night: oklch(0.78 0.06 253);
+    --shift-night-bg: oklch(0.32 0.03 253);
+    --shift-off: oklch(0.74 0.02 80);
+    --shift-off-bg: oklch(0.32 0.01 80);
+    --shift-annual: oklch(0.8 0.1 68);
+    --shift-annual-bg: oklch(0.34 0.05 64);
+    --shift-half: oklch(0.82 0.09 82);
+    --shift-half-bg: oklch(0.34 0.05 82);
+    --shift-subhol: oklch(0.78 0.08 168);
+    --shift-subhol-bg: oklch(0.32 0.04 168);
+    --shift-sick: oklch(0.78 0.09 300);
+    --shift-sick-bg: oklch(0.33 0.05 300);
+    --shift-absent: oklch(0.74 0.15 28);
+    --shift-absent-bg: oklch(0.34 0.07 28);
 }
 
 @layer base {
