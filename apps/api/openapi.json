@@ -355,6 +355,258 @@
           "leave"
         ]
       }
+    },
+    "/api/rosters": {
+      "get": {
+        "operationId": "getRoster",
+        "parameters": [
+          {
+            "name": "yearMonth",
+            "required": true,
+            "in": "query",
+            "description": "YYYY-MM",
+            "schema": {
+              "example": "2026-07",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RosterResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "rosters"
+        ]
+      },
+      "post": {
+        "operationId": "createRoster",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RosterQueryDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "yearMonth": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "rosters"
+        ]
+      }
+    },
+    "/api/rosters/{id}/entries": {
+      "patch": {
+        "operationId": "updateEntries",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateEntriesDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RosterTransitionResultDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "rosters"
+        ]
+      }
+    },
+    "/api/rosters/{id}/complete": {
+      "post": {
+        "operationId": "complete",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RosterTransitionResultDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "rosters"
+        ]
+      }
+    },
+    "/api/rosters/{id}/submit-close": {
+      "post": {
+        "operationId": "submitClose",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RosterTransitionResultDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "rosters"
+        ]
+      }
+    },
+    "/api/rosters/{id}/close": {
+      "post": {
+        "operationId": "close",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CloseRosterDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RosterTransitionResultDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "rosters"
+        ]
+      }
+    },
+    "/api/rosters/{id}/reject-close": {
+      "post": {
+        "operationId": "rejectClose",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectCloseDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RosterTransitionResultDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "rosters"
+        ]
+      }
     }
   },
   "info": {
@@ -1046,6 +1298,349 @@
         },
         "required": [
           "result"
+        ]
+      },
+      "RosterStatus": {
+        "type": "string",
+        "enum": [
+          "DRAFT",
+          "COMPLETED",
+          "CLOSING_APPROVAL",
+          "CLOSED"
+        ]
+      },
+      "RosterEmployeeRowDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "jobRole": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/JobRole"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "jobRole"
+        ]
+      },
+      "RosterTeamGroupDto": {
+        "type": "object",
+        "properties": {
+          "teamId": {
+            "type": "string",
+            "nullable": true
+          },
+          "name": {
+            "type": "string"
+          },
+          "employees": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RosterEmployeeRowDto"
+            }
+          }
+        },
+        "required": [
+          "teamId",
+          "name",
+          "employees"
+        ]
+      },
+      "ScheduleEntrySource": {
+        "type": "string",
+        "enum": [
+          "MANUAL",
+          "PRESET",
+          "APPROVAL"
+        ]
+      },
+      "RosterCellDto": {
+        "type": "object",
+        "properties": {
+          "employeeId": {
+            "type": "string"
+          },
+          "workDate": {
+            "type": "string",
+            "description": "YYYY-MM-DD"
+          },
+          "shiftCode": {
+            "type": "string"
+          },
+          "cellLabel": {
+            "type": "string",
+            "nullable": true
+          },
+          "startTime": {
+            "type": "string",
+            "nullable": true,
+            "example": "08:50"
+          },
+          "endTime": {
+            "type": "string",
+            "nullable": true,
+            "example": "18:00"
+          },
+          "isTimeOverridden": {
+            "type": "boolean",
+            "description": "셀 단위 시간 조정 여부(v1.3)"
+          },
+          "isProvisional": {
+            "type": "boolean"
+          },
+          "source": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ScheduleEntrySource"
+              }
+            ]
+          },
+          "carryableMinutes": {
+            "type": "number",
+            "nullable": true
+          }
+        },
+        "required": [
+          "employeeId",
+          "workDate",
+          "shiftCode",
+          "cellLabel",
+          "startTime",
+          "endTime",
+          "isTimeOverridden",
+          "isProvisional",
+          "source",
+          "carryableMinutes"
+        ]
+      },
+      "RosterDaySummaryDto": {
+        "type": "object",
+        "properties": {
+          "workDate": {
+            "type": "string",
+            "description": "YYYY-MM-DD"
+          },
+          "workingCount": {
+            "type": "number"
+          },
+          "caregiverDay": {
+            "type": "number"
+          },
+          "caregiverNight": {
+            "type": "number"
+          },
+          "dayShortage": {
+            "type": "boolean"
+          },
+          "nightShortage": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "workDate",
+          "workingCount",
+          "caregiverDay",
+          "caregiverNight",
+          "dayShortage",
+          "nightShortage"
+        ]
+      },
+      "RosterResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "yearMonth": {
+            "type": "string",
+            "description": "YYYY-MM"
+          },
+          "status": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RosterStatus"
+              }
+            ]
+          },
+          "daysInMonth": {
+            "type": "number"
+          },
+          "teams": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RosterTeamGroupDto"
+            }
+          },
+          "cells": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RosterCellDto"
+            }
+          },
+          "summary": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RosterDaySummaryDto"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "yearMonth",
+          "status",
+          "daysInMonth",
+          "teams",
+          "cells",
+          "summary"
+        ]
+      },
+      "RosterQueryDto": {
+        "type": "object",
+        "properties": {
+          "yearMonth": {
+            "type": "string",
+            "example": "2026-07",
+            "description": "YYYY-MM"
+          }
+        },
+        "required": [
+          "yearMonth"
+        ]
+      },
+      "RosterEntryInputDto": {
+        "type": "object",
+        "properties": {
+          "employeeId": {
+            "type": "string"
+          },
+          "workDate": {
+            "type": "string",
+            "description": "YYYY-MM-DD"
+          },
+          "shiftCode": {
+            "type": "string",
+            "description": "shift_type.code (D/N/NF/OFF/AL/…)"
+          },
+          "overrideStartTime": {
+            "type": "string",
+            "example": "07:30"
+          },
+          "overrideEndTime": {
+            "type": "string",
+            "example": "17:00"
+          }
+        },
+        "required": [
+          "employeeId",
+          "workDate",
+          "shiftCode"
+        ]
+      },
+      "UpdateEntriesDto": {
+        "type": "object",
+        "properties": {
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RosterEntryInputDto"
+            }
+          }
+        },
+        "required": [
+          "entries"
+        ]
+      },
+      "ValidationSeverity": {
+        "type": "string",
+        "enum": [
+          "WARN",
+          "BLOCK"
+        ]
+      },
+      "ValidationFindingDto": {
+        "type": "object",
+        "properties": {
+          "ruleCode": {
+            "type": "string",
+            "example": "MIN_STAFFING_DAY"
+          },
+          "severity": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ValidationSeverity"
+              }
+            ]
+          },
+          "detail": {
+            "type": "object",
+            "nullable": true,
+            "description": "산정 근거(날짜/실인원/필요인원 등)"
+          }
+        },
+        "required": [
+          "ruleCode",
+          "severity",
+          "detail"
+        ]
+      },
+      "RosterTransitionResultDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "status": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RosterStatus"
+              }
+            ]
+          },
+          "violations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ValidationFindingDto"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "violations"
+        ]
+      },
+      "CloseRosterDto": {
+        "type": "object",
+        "properties": {
+          "force": {
+            "type": "boolean",
+            "default": false,
+            "description": "위반 존재 시 강행 마감(D-19)"
+          },
+          "reason": {
+            "type": "string",
+            "description": "강행 마감 사유 — force=true 시 필수"
+          }
+        }
+      },
+      "RejectCloseDto": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
         ]
       }
     }

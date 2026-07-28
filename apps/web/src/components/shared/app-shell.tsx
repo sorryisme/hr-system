@@ -10,9 +10,10 @@ import { cn } from '@/lib/utils'
 const PAGE_TITLES: Record<string, string> = {
   '/dashboard': '대시보드',
   '/approvals': '결재함',
+  '/roster': '근무표',
 }
 
-const PLACEHOLDER_NAV_ITEMS = ['직원명단', '근무표']
+const PLACEHOLDER_NAV_ITEMS = ['직원명단']
 
 const navLinkClassName =
   'flex h-[38px] items-center gap-2 rounded-lg px-2.5 text-sm font-medium text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent/60'
@@ -65,6 +66,13 @@ export function AppShell() {
           <Badge variant="outline" className="border-transparent bg-warning/10 text-warning">
             3
           </Badge>
+        </Link>
+        <Link
+          to="/roster"
+          className={navLinkClassName}
+          activeProps={{ className: cn(navLinkClassName, navLinkActiveClassName) }}
+        >
+          근무표
         </Link>
 
         {PLACEHOLDER_NAV_ITEMS.map((label) => (

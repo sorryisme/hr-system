@@ -265,6 +265,11 @@ model ApprovalRequest {
   type                ApprovalRequestType
   /// SHIFT_CHANGE: 희망 근무유형
   desiredShiftId      BigInt?               @map("desired_shift_id") @db.UnsignedBigInt
+  /// [v1.3] SHIFT_CHANGE 희망 출근 시각(조기출근 등, §4.7 근무조정). NULL이면 desiredShift 기본 시각 사용.
+  /// 승인 시 ScheduleEntry.overrideStartTime로 반영
+  desiredStartTime    DateTime?             @map("desired_start_time") @db.Time(0)
+  /// [v1.3] SHIFT_CHANGE 희망 퇴근 시각(조기퇴근 등). NULL이면 desiredShift 기본 시각 사용
+  desiredEndTime      DateTime?             @map("desired_end_time") @db.Time(0)
   /// [v1.2] 사유. 연차·반차·유대=선택 / SHIFT_CHANGE=필수(D-14) — NOT NULL 강제는 앱 레벨
   reason              String?               @db.VarChar(500)
   /// CANCEL 유형이 참조하는 원건
@@ -474,7 +479,8 @@ model SubstituteHolidayLedger {
   amender  Employee? @relation("SubstituteHolidayLedgerAmender", fields: [amendedBy], references: [id])
   revoker  Employee? @relation("SubstituteHolidayLedgerRevoker", fields: [revokedBy], references: [id])
 
-  notifications Notification[]
+  notifications   Notification[]
+  scheduleEntries ScheduleEntry[] @relation("ScheduleEntrySourceLedger")
 
   @@unique([employeeId, workedHolidayDate], map: "uq_ledger_emp_day")
   @@index([signStatus, signRequestedAt], name: "idx_ledger_sign")
@@ -646,13 +652,22 @@ model ScheduleEntry {
   source          ScheduleEntrySource @default(MANUAL)
   /// [v1.2] 가반영 표시(§4.10): step_approved 구독 시 true(글자만), approved 구독 시 false로 확정(셀 색칠)
   isProvisional   Boolean             @default(false) @map("is_provisional")
+  /// [v1.3] 셀 단위 근무시간 조정(§4.8 "모든 근무는 시간 수정 가능"). NULL이면 shiftType 기본 startTime 사용.
+  /// 값이 있으면 편집기·출력에 "근무종류(시작~종료)"로 표기(예: 주(08:50~19:00), 조(07:30,17:00)).
+  /// overrideEndTime과 함께 사용(둘 다 NULL 또는 둘 다 값 — 앱 레벨)
+  overrideStartTime DateTime?         @map("override_start_time") @db.Time(0)
+  /// [v1.3] 셀 단위 조정 퇴근 시각
+  overrideEndTime   DateTime?         @map("override_end_time") @db.Time(0)
   /// 반영 근거 결재 건
   sourceRequestId BigInt?             @map("source_request_id") @db.UnsignedBigInt
+  /// [v1.3] 유대(유) 셀의 "유(이월인정시간,분)" 표기 원천(§4.4, 편집기 전용). 사용예정일 반영 셀에 연결
+  sourceLedgerId  BigInt?             @map("source_ledger_id") @db.UnsignedBigInt
 
-  roster        Roster           @relation(fields: [rosterId], references: [id])
-  employee      Employee         @relation(fields: [employeeId], references: [id])
-  shiftType     ShiftType        @relation(fields: [shiftTypeId], references: [id])
-  sourceRequest ApprovalRequest? @relation("ScheduleEntrySourceRequest", fields: [sourceRequestId], references: [id])
+  roster        Roster                   @relation(fields: [rosterId], references: [id])
+  employee      Employee                 @relation(fields: [employeeId], references: [id])
+  shiftType     ShiftType                @relation(fields: [shiftTypeId], references: [id])
+  sourceRequest ApprovalRequest?         @relation("ScheduleEntrySourceRequest", fields: [sourceRequestId], references: [id])
+  sourceLedger  SubstituteHolidayLedger? @relation("ScheduleEntrySourceLedger", fields: [sourceLedgerId], references: [id])
 
   @@unique([employeeId, workDate], map: "uq_entry")
   @@index([rosterId, workDate], name: "idx_entry_roster_date")

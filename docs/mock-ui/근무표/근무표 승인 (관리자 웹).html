@@ -1,0 +1,862 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<template id="__bundler_thumbnail" data-bg-color="#F4F1EA">
+  <svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
+    <rect width="1200" height="800" fill="#F4F1EA"/>
+    <rect x="80" y="120" width="1040" height="80" rx="12" fill="#E7DCC8"/>
+    <rect x="80" y="220" width="1040" height="480" rx="12" fill="#FFFFFF" stroke="#D9CDB3" stroke-width="4"/>
+    <g fill="#B5732A">
+      <rect x="120" y="270" width="60" height="30" rx="6"/>
+      <rect x="220" y="330" width="60" height="30" rx="6"/>
+      <rect x="320" y="390" width="60" height="30" rx="6"/>
+    </g>
+  </svg>
+</template>
+<title>근무표 &amp; 결재 — 관리자 웹 (반응형)</title>
+<!--
+  ============================================================
+  요양원 근태관리 Phase 1 — 관리자 승인 페이지 (반응형 웹)
+  순수 HTML + CSS + Vanilla JS (프레임워크/라이브러리 없음)
+
+  [설계 의도]
+    - 메인 영역   = 근무표 (엑셀 시트 재현): 직원 × 날짜 그리드
+    - 우측 사이드 = 결재함: 대기중인 신청을 승인/반려
+    - 승인 시 해당 연차/반차가 근무표 셀에 자동 반영
+      (기획서 Phase 2의 request.approved 이벤트 → 근무표 반영 개념을 UI로 시연)
+
+  [반응형]
+    - 데스크톱(≥960px): 근무표 + 사이드 결재함 동시 표시
+    - 모바일(<960px):   상단 탭으로 [근무표] / [결재함] 전환
+
+  [근무 코드] 근무종류별 표기 안내는 화면 상단 "전체 표기 안내" 버튼 참고
+    주=주간 / 야=야간(주야비·야간전담 공통) / 휴=휴무 / 연=연차(월차)
+    오전/오후=반차 / 유(이월인정시간,분)=유급휴일대체 / 주or야(출근,퇴근)=근무조정
+    병=병가 / 결=결근
+  ============================================================
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+/* ==================== 토큰 ==================== */
+:root {
+  --bg: #EDE6DA; --panel: #FBF9F5; --card: #fff;
+  --ink: #2B2622; --ink-sub: #8A7F70; --ink-mid: #5C5347;
+  --green: #2F7A6B; --green-dark: #276559; --green-bg: #E1EDE8;
+  --amber: #B5732A; --amber-bg: #FBEFD8;
+  --red: #C0503C; --red-bg: #F8E9E4;
+  --line: #E7DFD3; --line-soft: #EFE8DC;
+  /* 근무 코드 색 */
+  --c-day: #2F7A6B;   --c-day-bg: #E1EDE8;      /* 주간 */
+  --c-eve: #7A5EA6;   --c-eve-bg: #EEE7F6;      /* 오후 */
+  --c-night: #3E5470; --c-night-bg: #E4E9F0;    /* 야간 */
+  --c-off: #A79C8C;   --c-off-bg: #F1ECE3;      /* 휴무 */
+  --c-annual: #B5732A;--c-annual-bg: #FBEFD8;   /* 연차 */
+  --c-half: #C08A2A;  --c-half-bg: #FCF4E0;     /* 반차 */
+  --c-subhol: #3E7A6E;--c-subhol-bg: #E1EFEA;   /* 유급휴일대체 */
+  --c-adj: #6B5E3E;   --c-adj-bg: #F1E9D8;      /* 근무조정 */
+  --c-sick: #8A6BAA;  --c-sick-bg: #EFE6F5;     /* 병가 */
+  --c-absent: #A8342A;--c-absent-bg: #F6DAD5;   /* 결근 */
+  --blue: #3E6FA6;    --blue-bg: #E3ECF5;        /* 과부족 확인: 야간 */
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font-family: 'Noto Sans KR', system-ui, sans-serif; -webkit-font-smoothing: antialiased;
+  display: flex; flex-direction: column; height: 100vh; overflow: hidden;
+}
+
+/* ==================== 상단 바 ==================== */
+.appbar {
+  flex: none; display: flex; align-items: center; gap: 16px;
+  padding: 14px 24px; background: var(--card); border-bottom: 1px solid var(--line);
+}
+.appbar .brand { display: flex; align-items: center; gap: 12px; }
+.appbar .logo {
+  width: 40px; height: 40px; border-radius: 12px; background: var(--green);
+  display: flex; align-items: center; justify-content: center; flex: none;
+}
+.appbar .brand-text .name { font-size: 18px; font-weight: 900; line-height: 1.1; }
+.appbar .brand-text .role { font-size: 13px; color: var(--ink-sub); font-weight: 700; }
+.appbar .spacer { flex: 1; }
+.month-nav { display: flex; align-items: center; gap: 8px; }
+.month-nav button {
+  width: 38px; height: 38px; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--card); cursor: pointer; font-size: 18px; font-weight: 900; color: var(--ink-mid);
+}
+.month-nav .label { font-size: 18px; font-weight: 900; min-width: 120px; text-align: center; }
+.admin-chip {
+  display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700;
+  color: var(--ink-mid); background: var(--panel); border: 1px solid var(--line);
+  padding: 7px 14px; border-radius: 999px;
+}
+
+/* ==================== 모바일 탭 ==================== */
+.mobile-tabs { display: none; flex: none; padding: 10px 16px; gap: 8px; background: var(--card); border-bottom: 1px solid var(--line); }
+.mobile-tabs button {
+  flex: 1; border: none; border-radius: 12px; padding: 12px; font-size: 16px; font-weight: 800;
+  font-family: inherit; cursor: pointer; background: var(--panel); color: var(--ink-sub);
+}
+.mobile-tabs button.active { background: var(--ink); color: #fff; }
+.tab-badge {
+  display: inline-block; min-width: 22px; margin-left: 6px; padding: 1px 7px; border-radius: 999px;
+  background: var(--amber); color: #fff; font-size: 13px; font-weight: 800;
+}
+.mobile-tabs button.active .tab-badge { background: rgba(255,255,255,.28); }
+
+/* ==================== 레이아웃 ==================== */
+.layout { flex: 1; display: flex; min-height: 0; }
+.main { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 20px 24px; overflow: hidden; }
+.sidebar {
+  flex: none; width: 384px; background: var(--panel); border-left: 1px solid var(--line);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+
+/* ==================== 근무표 헤더 ==================== */
+.main-head { flex: none; display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px; flex-wrap: wrap; gap: 10px; }
+.main-head h1 { font-size: 24px; font-weight: 900; margin: 0; }
+.main-head .sub { font-size: 14px; color: var(--ink-sub); }
+.legend { display: flex; flex-wrap: wrap; gap: 8px; }
+.legend .item { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; color: var(--ink-mid); }
+.legend .sw { min-width: 18px; height: 18px; padding: 0 4px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 900; }
+.btn-guide { border: 1px solid var(--line); background: var(--card); color: var(--ink-mid); font-size: 13px; font-weight: 800; padding: 7px 14px; border-radius: 999px; cursor: pointer; font-family: inherit; white-space: nowrap; flex: none; }
+.btn-guide:hover { background: var(--panel); }
+
+/* ==================== 근무표 그리드 ==================== */
+.grid-wrap { flex: 1; overflow: auto; background: var(--card); border: 1px solid var(--line); border-radius: 16px; }
+table.schedule { border-collapse: separate; border-spacing: 0; width: max-content; font-size: 13px; }
+table.schedule th, table.schedule td { border-right: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); }
+
+/* 헤더 행 (날짜) */
+table.schedule thead th {
+  position: sticky; top: 0; z-index: 3; background: var(--panel);
+  font-weight: 800; color: var(--ink-mid); padding: 6px 0; width: 34px; text-align: center;
+}
+table.schedule thead th .dnum { font-size: 13px; font-weight: 900; color: var(--ink); }
+table.schedule thead th .dow { font-size: 10px; font-weight: 700; }
+table.schedule thead th.sun .dow, table.schedule thead th.sun .dnum { color: var(--red); }
+table.schedule thead th.sat .dow, table.schedule thead th.sat .dnum { color: #3E5470; }
+
+/* 이름 열 (좌측 고정) */
+.col-name {
+  position: sticky; left: 0; z-index: 2; background: var(--card);
+  text-align: left; padding: 0 12px; min-width: 116px; box-shadow: 1px 0 0 var(--line);
+}
+thead .col-name { z-index: 4; background: var(--panel); }
+.col-name .nm { font-size: 14px; font-weight: 800; }
+.col-name .jb { font-size: 11px; color: var(--ink-sub); font-weight: 700; }
+
+/* 팀 구분 행 */
+tr.team-row td { background: var(--line-soft); border-bottom: 1px solid var(--line); padding: 7px 14px; }
+tr.team-row .col-name { background: var(--line-soft); box-shadow: none; }
+tr.team-row .team-label { font-size: 13px; font-weight: 900; color: var(--ink-mid); letter-spacing: .02em; }
+
+/* 근무 셀 */
+td.cell { text-align: center; height: 38px; font-weight: 800; color: var(--ink); }
+td.cell .code {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: 8px; font-size: 12px;
+}
+td.cell.weekend { background: #FBF9F5; }
+.code.day    { background: var(--c-day-bg);    color: var(--c-day); }
+.code.eve    { background: var(--c-eve-bg);    color: var(--c-eve); }
+.code.night  { background: var(--c-night-bg);  color: var(--c-night); }
+.code.off    { background: var(--c-off-bg);    color: var(--c-off); }
+.code.annual { background: var(--c-annual-bg); color: var(--c-annual); outline: 2px solid var(--c-annual); outline-offset: -2px; }
+.code.half   { background: var(--c-half-bg);   color: var(--c-half); }
+.code.subhol { background: var(--c-subhol-bg); color: var(--c-subhol); }
+.code.adj    { background: var(--c-day-bg);    color: var(--c-day); }
+.code.sick   { background: var(--c-sick-bg);   color: var(--c-sick); }
+.code.absent { background: var(--c-absent-bg); color: var(--c-absent); }
+td.cell .code.wide { width: auto; min-width: 30px; padding: 0 6px; border-radius: 8px; font-size: 11px; white-space: nowrap; }
+td.cell .code.stacked {
+  width: auto; min-width: 30px; height: auto; padding: 3px 5px; border-radius: 8px;
+  flex-direction: column; line-height: 1.15; gap: 0;
+}
+td.cell .code.stacked b { font-size: 11px; font-weight: 900; }
+td.cell .code.stacked small { font-size: 8px; font-weight: 700; }
+
+/* 하이라이트 (선택된 결재 건의 대상 셀) */
+td.cell.highlight { background: #FFF6E4 !important; box-shadow: inset 0 0 0 2px var(--amber); }
+tr.row-highlight .col-name { background: #FFF6E4; box-shadow: 1px 0 0 var(--amber); }
+
+/* 방금 반영된 셀 애니메이션 */
+@keyframes flashIn { 0% { transform: scale(.5); opacity: 0; } 60% { transform: scale(1.15); } 100% { transform: scale(1); opacity: 1; } }
+td.cell .code.just-added { animation: flashIn .45s ease-out; }
+
+/* 근무 인원 요약 행 */
+tr.summary td { background: var(--panel); border-top: 1px solid var(--line); }
+tr.summary .col-name { background: var(--panel); font-size: 13px; font-weight: 800; color: var(--ink-sub); height: 38px; display: flex; align-items: center; }
+tr.summary td.cell { font-size: 14px; font-weight: 900; color: var(--ink-mid); height: 38px; }
+tr.summary td.cell.short { color: var(--red); }
+tr.summary td.cell.short::after { content: '!'; }
+
+/* 요양보호사 과부족 확인 (주간/야간 인원 합) */
+tr.care-row td { background: var(--panel); border-top: 1px solid var(--line); }
+tr.care-row .col-name { background: var(--panel); height: 38px; display: flex; align-items: center; font-size: 13px; font-weight: 800; color: var(--ink-mid); white-space: nowrap; }
+.care-chip { font-size: 12px; font-weight: 800; padding: 4px 12px; border-radius: 999px; }
+.care-chip.day { color: var(--amber); background: var(--amber-bg); }
+.care-chip.night { color: var(--blue); background: var(--blue-bg); }
+tr.care-row td.cell { font-size: 13px; font-weight: 800; color: var(--ink-mid); height: 38px; }
+tr.care-row td.cell.caution { color: var(--amber); background: var(--amber-bg); }
+tr.care-row td.cell.crit { color: var(--red); background: var(--red-bg); font-weight: 900; }
+td.care-total { background: var(--card); border-left: 2px solid var(--line); text-align: center; vertical-align: middle; }
+td.care-total .tlabel { font-size: 11px; color: var(--ink-sub); font-weight: 800; }
+td.care-total .tval { font-size: 18px; font-weight: 900; color: var(--ink); margin-top: 2px; }
+td.care-total.ratio .tval { color: var(--green); }
+
+/* ==================== 사이드바 결재함 ==================== */
+.side-head { flex: none; padding: 20px 22px 0; }
+.side-head h2 { font-size: 20px; font-weight: 900; margin: 0 0 4px; }
+.side-head .desc { font-size: 13px; color: var(--ink-sub); line-height: 1.5; margin: 0 0 14px; }
+.side-tabs { display: flex; gap: 8px; }
+.side-tabs button {
+  border: none; border-radius: 12px; padding: 9px 16px; font-size: 15px; font-weight: 800;
+  font-family: inherit; cursor: pointer; background: var(--card); color: var(--ink-sub); border: 1px solid var(--line);
+}
+.side-tabs button.active { background: var(--ink); color: #fff; border-color: var(--ink); }
+
+.side-list { flex: 1; overflow-y: auto; padding: 14px 16px 20px; display: flex; flex-direction: column; gap: 12px; }
+
+.appr-card {
+  background: var(--card); border: 1.5px solid var(--line-soft); border-radius: 16px;
+  padding: 16px 16px 14px; cursor: pointer; transition: border-color .12s, box-shadow .12s;
+}
+.appr-card:hover { border-color: #D9CFBF; }
+.appr-card.selected { border-color: var(--green); box-shadow: 0 0 0 3px rgba(47,122,107,.12); }
+.appr-card .top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.appr-card .nm { font-size: 17px; font-weight: 900; }
+.appr-card .job { font-size: 12px; font-weight: 700; color: var(--ink-sub); background: var(--panel); padding: 3px 9px; border-radius: 999px; }
+.appr-card .sameday { font-size: 12px; font-weight: 800; color: var(--amber); background: var(--amber-bg); padding: 3px 9px; border-radius: 999px; }
+.appr-card .body { margin-top: 10px; font-size: 15px; font-weight: 700; color: var(--ink-mid); }
+.appr-card .meta { margin-top: 3px; font-size: 13px; color: var(--ink-sub); }
+.appr-card .reason { margin-top: 4px; font-size: 13px; color: var(--ink-sub); }
+.appr-card .actions { display: flex; gap: 8px; margin-top: 14px; }
+.appr-card .actions button { flex: 1; border-radius: 11px; padding: 11px; font-size: 15px; font-weight: 800; font-family: inherit; cursor: pointer; }
+.btn-approve { border: none; background: var(--green); color: #fff; }
+.btn-approve:hover { background: var(--green-dark); }
+.btn-reject { border: 1.5px solid #E5C4BC; background: var(--card); color: var(--red); }
+.btn-reject:hover { background: #FBF0ED; }
+
+/* 처리완료 카드 */
+.done-card { background: var(--card); border: 1.5px solid var(--line-soft); border-radius: 16px; padding: 14px 16px; }
+.done-card .top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.result-pill { font-size: 13px; font-weight: 800; padding: 3px 11px; border-radius: 999px; }
+.result-pill.approved { color: var(--green); background: var(--green-bg); }
+.result-pill.rejected { color: var(--red); background: var(--red-bg); }
+.done-card .body { margin-top: 8px; font-size: 14px; color: var(--ink-mid); }
+.done-card .reason { margin-top: 8px; font-size: 13px; color: var(--red); background: var(--red-bg); border-radius: 10px; padding: 8px 11px; }
+
+.empty { text-align: center; color: #A79C8C; font-size: 16px; font-weight: 700; padding: 50px 0; }
+
+/* ==================== 반려 모달 ==================== */
+.overlay { position: fixed; inset: 0; background: rgba(40,30,15,.42); display: none; align-items: center; justify-content: center; z-index: 100; padding: 20px; }
+.overlay.open { display: flex; }
+.modal { width: 440px; max-width: 100%; max-height: 90vh; overflow-y: auto; background: var(--card); border-radius: 20px; padding: 26px 26px 22px; box-shadow: 0 30px 60px -20px rgba(0,0,0,.4); }
+.modal h3 { font-size: 21px; font-weight: 900; margin: 0; }
+.modal p { font-size: 14px; color: var(--ink-sub); margin: 8px 0 16px; line-height: 1.5; }
+.modal textarea {
+  width: 100%; height: 104px; resize: none; border: 1.5px solid var(--line); border-radius: 12px;
+  padding: 13px 15px; font-size: 16px; font-family: inherit; color: var(--ink); outline: none;
+}
+.modal textarea:focus { border-color: var(--green); }
+.modal .modal-actions { display: flex; gap: 10px; margin-top: 16px; }
+.modal .modal-actions button { flex: 1; border-radius: 12px; padding: 14px; font-size: 16px; font-weight: 800; font-family: inherit; cursor: pointer; }
+.modal .cancel { border: 2px solid var(--line); background: var(--card); color: var(--ink-mid); }
+.modal .confirm { border: none; background: var(--red); color: #fff; }
+.modal .confirm:disabled { background: #EBD9D3; color: #C9A79E; cursor: not-allowed; }
+.modal.wide { width: 640px; }
+.code-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 4px; }
+.code-table th, .code-table td { border-bottom: 1px solid var(--line-soft); padding: 9px 10px; text-align: left; vertical-align: top; }
+.code-table th { color: var(--ink-sub); font-weight: 800; font-size: 12px; }
+.code-table td.content { color: var(--ink-mid); white-space: pre-line; line-height: 1.4; }
+.code-table td.fmt { font-weight: 800; white-space: nowrap; }
+
+/* ==================== 토스트 ==================== */
+.toast {
+  position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%) translateY(20px);
+  background: var(--ink); color: #fff; padding: 14px 22px; border-radius: 14px;
+  font-size: 15px; font-weight: 700; opacity: 0; pointer-events: none; transition: all .25s; z-index: 200;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ==================== 반응형 ==================== */
+@media (max-width: 959px) {
+  body { height: auto; min-height: 100vh; overflow: auto; }
+  .appbar { flex-wrap: wrap; }
+  .appbar .month-nav { order: 3; width: 100%; justify-content: center; }
+  .mobile-tabs { display: flex; }
+  .layout { flex-direction: column; }
+  .main, .sidebar { width: auto; }
+  .sidebar { border-left: none; border-top: 1px solid var(--line); }
+  .main.hide-mobile, .sidebar.hide-mobile { display: none; }
+  .main { height: auto; padding: 16px; }
+  .grid-wrap { max-height: 72vh; }
+  .sidebar { height: auto; }
+  .side-list { max-height: none; }
+}
+</style>
+</head>
+<body>
+
+<!-- ============ 상단 바 ============ -->
+<header class="appbar">
+  <div class="brand">
+    <div class="logo">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 21s-7-4.35-9.5-8.5C.5 8.5 3 5 6.5 5 9 5 12 8 12 8s3-3 5.5-3C21 5 23.5 8.5 21.5 12.5 19 16.65 12 21 12 21z" stroke="#fff" stroke-width="2" stroke-linejoin="round"/></svg>
+    </div>
+    <div class="brand-text">
+      <div class="name">돌봄손길 요양원</div>
+      <div class="role">근무표 · 결재 관리</div>
+    </div>
+  </div>
+  <div class="spacer"></div>
+  <div class="month-nav">
+    <button aria-label="이전 달">‹</button>
+    <span class="label">2026년 7월</span>
+    <button aria-label="다음 달">›</button>
+  </div>
+  <div class="admin-chip">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="2"/><path d="M4 20c0-4 3.5-6 8-6s8 2 8 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    사무국장 이현주
+  </div>
+</header>
+
+<!-- ============ 모바일 탭 ============ -->
+<nav class="mobile-tabs" id="mobile-tabs">
+  <button data-view="schedule" class="active">근무표</button>
+  <button data-view="approvals">결재함 <span class="tab-badge" id="tab-badge">0</span></button>
+</nav>
+
+<!-- ============ 레이아웃 ============ -->
+<div class="layout">
+
+  <!-- 메인: 근무표 -->
+  <main class="main" id="main-panel">
+    <div class="main-head">
+      <div>
+        <h1>7월 근무표</h1>
+        <div class="sub">승인된 연차·반차는 근무표에 자동으로 표시됩니다</div>
+      </div>
+      <div class="legend">
+        <span class="item"><span class="sw code day">주</span>주간</span>
+        <span class="item"><span class="sw code night">야</span>야간</span>
+        <span class="item"><span class="sw code off">휴</span>휴무</span>
+        <span class="item"><span class="sw code annual">연</span>연차</span>
+        <span class="item"><span class="sw code half">오전</span>오전반차</span>
+        <span class="item"><span class="sw code half">오후</span>오후반차</span>
+        <span class="item"><span class="sw code subhol">유</span>휴일대체</span>
+        <span class="item"><span class="sw code adj">조</span>근무조정</span>
+        <span class="item"><span class="sw code sick">병</span>병가</span>
+        <span class="item"><span class="sw code absent">결</span>결근</span>
+      </div>
+      <button class="btn-guide" id="code-guide-btn">표기 안내 전체 확인</button>
+    </div>
+    <div class="grid-wrap">
+      <table class="schedule">
+        <thead><tr id="head-row"></tr></thead>
+        <tbody id="body-rows"></tbody>
+        <tfoot id="foot-row"></tfoot>
+      </table>
+    </div>
+  </main>
+
+  <!-- 사이드: 결재함 -->
+  <aside class="sidebar hide-mobile" id="side-panel">
+    <div class="side-head">
+      <h2>결재함</h2>
+      <p class="desc">신청을 승인하면 위 근무표에 바로 반영됩니다. 반려는 사유 입력이 필요합니다.</p>
+      <div class="side-tabs">
+        <button data-tab="pending" class="active" id="tab-pending">대기 <span id="pending-count">0</span></button>
+        <button data-tab="done" id="tab-done">처리완료 <span id="done-count">0</span></button>
+      </div>
+    </div>
+    <div class="side-list" id="side-list"></div>
+  </aside>
+
+</div>
+
+<!-- ============ 반려 모달 ============ -->
+<div class="overlay" id="reject-overlay">
+  <div class="modal">
+    <h3>반려 사유를 알려주세요</h3>
+    <p>신청자에게 그대로 전달됩니다. 반려는 사유 입력이 필요합니다.</p>
+    <textarea id="reject-text" placeholder="예) 그날은 물리치료 일정이 겹칩니다."></textarea>
+    <div class="modal-actions">
+      <button class="cancel" id="reject-cancel">취소</button>
+      <button class="confirm" id="reject-confirm" disabled>반려 확정</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- ============ 근무 코드 안내 모달 ============ -->
+<div class="overlay" id="guide-overlay">
+  <div class="modal wide">
+    <h3>근무 표기 안내</h3>
+    <p>근무표에 표시되는 코드와 표기 형식입니다.</p>
+    <table class="code-table">
+      <thead><tr><th>근무종류</th><th>내용</th><th>표기형식</th></tr></thead>
+      <tbody>
+        <tr><td>주간</td><td class="content">주간근무 08:50~18:00, 8시간
+휴게시간 70분</td><td class="fmt">주</td></tr>
+        <tr><td>야간(주야비)</td><td class="content">야간근무 17:50~익일 09:00, 9시간 40분
+휴게시간 주간 90분, 야간 240분</td><td class="fmt">야</td></tr>
+        <tr><td>야간(야간전담)</td><td class="content">야간근무 18:00~익일 09:00, 8시간
+휴게시간 주간 180분, 야간 240분</td><td class="fmt">야</td></tr>
+        <tr><td>휴무</td><td class="content">휴일</td><td class="fmt">휴</td></tr>
+        <tr><td>연차(월차)</td><td class="content">유급휴일 8시간</td><td class="fmt">연</td></tr>
+        <tr><td>오전반차</td><td class="content">유급휴일 4시간</td><td class="fmt">오전</td></tr>
+        <tr><td>오후반차</td><td class="content">유급휴일 4시간</td><td class="fmt">오후</td></tr>
+        <tr><td>유급휴일대체</td><td class="content">유급휴일대체</td><td class="fmt">유(이월인정시간,분)</td></tr>
+        <tr><td>근무조정</td><td class="content">조기출근, 퇴근 등</td><td class="fmt">주or야(출근시간,퇴근시간)</td></tr>
+        <tr><td>병가</td><td class="content">유급병가</td><td class="fmt">병</td></tr>
+        <tr><td>결근</td><td class="content">결근</td><td class="fmt">결</td></tr>
+      </tbody>
+    </table>
+    <div class="modal-actions" style="justify-content:flex-end">
+      <button class="cancel" id="guide-close" style="flex:none;padding:12px 22px">닫기</button>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+/* ============================================================
+ * 데이터
+ * ============================================================ */
+const YEAR = 2026, MONTH = 6;                 // 2026년 7월 (0-index)
+const DAYS = new Date(YEAR, MONTH + 1, 0).getDate();   // 31
+const FIRST_DOW = new Date(YEAR, MONTH, 1).getDay();   // 요일 시작
+const DOW_KR = ['일','월','화','수','목','금','토'];
+const MIN_STAFF = 4;                          // 하루 최소 근무 인원 (미만이면 경고)
+
+/* 근무 코드 메타: 표시 문자 + CSS 클래스 + 설명 (전체 표기는 상단 "표기 안내" 모달 참고) */
+const CODE = {
+  D:      { ch: '주',  cls: 'day',    working: true,  desc: '주간근무 08:50~18:00, 8시간' },
+  N1:     { ch: '야',  cls: 'night',  working: true,  desc: '야간(주야비) 17:50~익일 09:00, 9시간 40분' },
+  N2:     { ch: '야',  cls: 'night',  working: true,  desc: '야간(야간전담) 18:00~익일 09:00, 8시간' },
+  OFF:    { ch: '휴',  cls: 'off',    working: false, desc: '휴무' },
+  ANN:    { ch: '연',  cls: 'annual', working: false, desc: '연차(월차) · 유급휴일 8시간' },
+  HALF_AM:{ ch: '오전', cls: 'half',   working: false, desc: '오전반차 · 유급휴일 4시간' },
+  HALF_PM:{ ch: '오후', cls: 'half',   working: false, desc: '오후반차 · 유급휴일 4시간' },
+  SUBHOL: { ch: '유',  cls: 'subhol', working: false, desc: '유급휴일대체' },
+  ADJ:    { ch: '조',  cls: 'adj',    working: true,  desc: '근무조정(조기출근/퇴근 등)' },
+  SICK:   { ch: '병',  cls: 'sick',   working: false, desc: '병가 · 유급병가' },
+  ABSENT: { ch: '결',  cls: 'absent', working: false, desc: '결근' },
+};
+
+/* 직원 명단 + 주간 근무 패턴(7일 반복). 패턴을 한 달로 펼쳐 기본 근무표 생성 */
+const EMPLOYEES = [
+  { id: 'e1', name: '김순자', job: '요양보호사', team: '요양1팀', nightType: 'N1', pattern: ['D','D','N','N','OFF','OFF','D'] },
+  { id: 'e2', name: '박영희', job: '요양보호사', team: '요양1팀', nightType: 'N1', pattern: ['N','N','OFF','D','D','D','OFF'] },
+  { id: 'e4', name: '최정옥', job: '요양보호사', team: '요양1팀', nightType: 'N2', pattern: ['N','N','N','OFF','OFF','N','N'] },
+  { id: 'e5', name: '정미경', job: '요양보호사', team: '요양2팀', nightType: 'N1', pattern: ['OFF','D','D','N','N','OFF','D'] },
+  { id: 'e6', name: '한복순', job: '요양보호사', team: '요양2팀', nightType: 'N2', pattern: ['N','OFF','N','N','OFF','N','N'] },
+  { id: 'e8', name: '서명희', job: '요양보호사', team: '요양2팀', nightType: 'N1', pattern: ['OFF','N','N','OFF','D','D','D'] },
+  { id: 'e3', name: '이말순', job: '조리원',     team: '지원팀', nightType: 'N1', pattern: ['D','D','D','D','D','OFF','OFF'] },
+  { id: 'e7', name: '오금자', job: '간호조무사', team: '지원팀', nightType: 'N1', pattern: ['D','D','OFF','D','D','OFF','D'] },
+];
+
+/* 단순 코드로 모자란 셀 중 동적 표기(유급휴일대체/근무조정/병가/결근/반차) 데모 — empId-day 키 */
+const overrides = {
+  'e2-9':  { code: 'SUBHOL', carryH: 2, carryM: 30 },
+  'e7-13': { code: 'ADJ', base: 'D', start: '07:30', end: '17:00' },
+  'e3-4':  { code: 'SICK' },
+  'e5-16': { code: 'ABSENT' },
+  'e8-6':  { code: 'HALF_AM' },
+};
+
+/* 직원별 한 달 근무 배열 생성 (index 0 = 1일) */
+const schedule = {};
+for (const emp of EMPLOYEES) {
+  const arr = [];
+  for (let d = 1; d <= DAYS; d++) {
+    const dow = (FIRST_DOW + d - 1) % 7;
+    const raw = emp.pattern[dow];
+    arr.push(raw === 'N' ? emp.nightType : raw);   // 야간은 직원별 야간유형(N1/N2)으로 확정
+  }
+  schedule[emp.id] = arr;
+}
+
+/* 해당 날짜의 실제 코드 + 동적 표기 정보(있다쓸) 반환 */
+function getCell(empId, day) {
+  const ov = overrides[`${empId}-${day}`];
+  if (ov) return { code: ov.code, ov };
+  return { code: schedule[empId][day - 1], ov: null };
+}
+
+/* 결재 대기 신청 (종사자 모바일에서 올라온 건). targetDays = 7월 일(day) */
+let requests = [
+  { id: 'r1', empId: 'e1', type: 'ANN',  targetDays: [21, 22], at: '오늘 08:12', bal: '5일',   reason: null, status: 'PENDING' },
+  { id: 'r2', empId: 'e4', type: 'ANN',  targetDays: [21],     at: '오늘 08:40', bal: '6일',   reason: null, status: 'PENDING' },
+  { id: 'r3', empId: 'e2', type: 'HALF', targetDays: [18],     at: '오늘 07:50', bal: '3.5일', reason: null, status: 'PENDING', half: 'AM' },
+  { id: 'r4', empId: 'e3', type: 'ANN',  targetDays: [25],     at: '어제 17:30', bal: '8일',   reason: null, status: 'PENDING' },
+  { id: 'r5', empId: 'e6', type: 'ANN',  targetDays: [10],     at: '어제 14:05', bal: '4일',   reason: null, status: 'PENDING', postApply: true },
+];
+
+/* UI 상태 */
+const ui = { sideTab: 'pending', selectedReqId: null, rejectReqId: null };
+
+const $ = (s) => document.querySelector(s);
+const empById = (id) => EMPLOYEES.find(e => e.id === id);
+
+/* ============================================================
+ * 근무표 렌더링
+ * ============================================================ */
+function renderHead() {
+  const tr = $('#head-row');
+  tr.replaceChildren();
+  const nameTh = document.createElement('th');
+  nameTh.className = 'col-name';
+  nameTh.innerHTML = '<span class="nm" style="font-size:13px;color:var(--ink-sub)">직원 / 날짜</span>';
+  tr.append(nameTh);
+  for (let d = 1; d <= DAYS; d++) {
+    const dow = (FIRST_DOW + d - 1) % 7;
+    const th = document.createElement('th');
+    if (dow === 0) th.className = 'sun'; else if (dow === 6) th.className = 'sat';
+    th.innerHTML = `<div class="dnum">${d}</div><div class="dow">${DOW_KR[dow]}</div>`;
+    tr.append(th);
+  }
+}
+
+function renderBody() {
+  const tbody = $('#body-rows');
+  tbody.replaceChildren();
+  const sel = requests.find(r => r.id === ui.selectedReqId && r.status === 'PENDING');
+
+  let lastTeam = null;
+  for (const emp of EMPLOYEES) {
+    if (emp.team !== lastTeam) {
+      lastTeam = emp.team;
+      const teamTr = document.createElement('tr');
+      teamTr.className = 'team-row';
+      const teamTd = document.createElement('td');
+      teamTd.colSpan = DAYS + 1;
+      teamTd.innerHTML = `<span class="team-label">${emp.team}</span>`;
+      teamTr.append(teamTd);
+      tbody.append(teamTr);
+    }
+
+    const tr = document.createElement('tr');
+    tr.dataset.emp = emp.id;
+    if (sel && sel.empId === emp.id) tr.classList.add('row-highlight');
+
+    const nameTd = document.createElement('td');
+    nameTd.className = 'col-name';
+    nameTd.innerHTML = `<div class="nm">${emp.name}</div><div class="jb">${emp.job}</div>`;
+    tr.append(nameTd);
+
+    for (let d = 1; d <= DAYS; d++) {
+      const dow = (FIRST_DOW + d - 1) % 7;
+      const { code, ov } = getCell(emp.id, d);
+      const meta = CODE[code];
+      const td = document.createElement('td');
+      td.className = 'cell' + ((dow === 0 || dow === 6) ? ' weekend' : '');
+      td.dataset.emp = emp.id; td.dataset.day = d;
+      if (meta) {
+        let label = meta.ch;
+        if (code === 'SUBHOL') label = `유(${ov.carryH},${ov.carryM})`;
+        if (code === 'ADJ') label = `${CODE[ov.base].ch}(${ov.start},${ov.end})`;
+        const span = document.createElement('span');
+        if (code === 'ADJ') {
+          span.className = 'code ' + meta.cls + ' stacked';
+          span.innerHTML = `<b>${CODE[ov.base].ch}</b><small>${ov.start}</small><small>${ov.end}</small>`;
+        } else {
+          span.className = 'code ' + meta.cls + (label.length > 1 ? ' wide' : '');
+          span.textContent = label;
+        }
+        span.title = meta.desc;
+        td.append(span);
+      }
+      /* 선택된 결재 건의 대상 셀 하이라이트 */
+      if (sel && sel.empId === emp.id && sel.targetDays.includes(d)) td.classList.add('highlight');
+      tr.append(td);
+    }
+    tbody.append(tr);
+  }
+}
+
+/* 하단 요약: 날짜별 근무 인원 (working=true 코드 수). 최소 인원 미만이면 빨강 */
+function renderFoot() {
+  const tf = $('#foot-row');
+  tf.replaceChildren();
+  const tr = document.createElement('tr');
+  tr.className = 'summary';
+  const label = document.createElement('td');
+  label.className = 'col-name';
+  label.textContent = '근무 인원';
+  tr.append(label);
+  for (let d = 1; d <= DAYS; d++) {
+    let count = 0;
+    for (const emp of EMPLOYEES) {
+      const meta = CODE[getCell(emp.id, d).code];
+      if (meta && meta.working) count++;
+    }
+    const td = document.createElement('td');
+    td.className = 'cell' + (count < MIN_STAFF ? ' short' : '');
+    td.textContent = count;
+    tr.append(td);
+  }
+  tf.append(tr);
+  renderCareShortage(tf);
+}
+
+/* 요양보호사 과부족 확인: 날짜별 주간/야간 인원 합 + 월평균·비율 */
+function renderCareShortage(tf) {
+  const care = EMPLOYEES.filter(e => e.job === '요양보호사');
+
+  const dayRow = document.createElement('tr'); dayRow.className = 'care-row';
+  const dayLabel = document.createElement('td'); dayLabel.className = 'col-name';
+  dayLabel.innerHTML = '<span class="care-chip day">주간</span>';
+  dayRow.append(dayLabel);
+
+  const nightRow = document.createElement('tr'); nightRow.className = 'care-row';
+  const nightLabel = document.createElement('td'); nightLabel.className = 'col-name';
+  nightLabel.innerHTML = '<span class="care-chip night">야간</span>';
+  nightRow.append(nightLabel);
+
+  const dayCounts = [], nightCounts = [];
+  for (let d = 1; d <= DAYS; d++) {
+    let dc = 0, nc = 0;
+    for (const emp of care) {
+      const code = getCell(emp.id, d).code;
+      if (code === 'D') dc++;
+      if (code === 'N1' || code === 'N2') nc++;
+    }
+    dayCounts.push(dc); nightCounts.push(nc);
+
+    const dTd = document.createElement('td');
+    dTd.className = 'cell' + (dc <= 13 ? ' crit' : dc === 14 ? ' caution' : '');
+    dTd.textContent = dc;
+    dayRow.append(dTd);
+
+    const nTd = document.createElement('td');
+    nTd.className = 'cell' + (nc <= 13 ? ' crit' : '');
+    nTd.textContent = nc;
+    nightRow.append(nTd);
+  }
+
+  tf.append(dayRow, nightRow);
+}
+
+function renderSchedule() { renderHead(); renderBody(); renderFoot(); }
+
+/* ============================================================
+ * 결재함 렌더링
+ * ============================================================ */
+const HALF_LABEL = { AM: '오전반차', PM: '오후반차' };
+function reqTypeText(r) {
+  if (r.type === 'ANN')  return `연차 ${r.targetDays.length}일`;
+  if (r.type === 'HALF') return HALF_LABEL[r.half] || '반차';
+  return '휴일대체';
+}
+function reqDatesText(r) {
+  const s = [...r.targetDays].sort((a, b) => a - b);
+  if (s.length === 1) return `7월 ${s[0]}일`;
+  const contiguous = s.every((v, i) => i === 0 || v === s[i - 1] + 1);
+  return contiguous ? `7월 ${s[0]}~${s[s.length - 1]}일` : `7월 ${s.join(', ')}일`;
+}
+/* 같은 날 다른 직원의 대기 연차 수 (인력 공백 사전 인지 — 문서 US-04) */
+function sameDayCount(r) {
+  if (r.type !== 'ANN') return 0;
+  const set = new Set();
+  for (const o of requests) {
+    if (o.id !== r.id && o.status === 'PENDING' && o.type === 'ANN' &&
+        o.targetDays.some(d => r.targetDays.includes(d))) set.add(o.id);
+  }
+  return set.size;
+}
+
+function updateCounts() {
+  const pending = requests.filter(r => r.status === 'PENDING').length;
+  const done = requests.filter(r => r.status !== 'PENDING').length;
+  $('#pending-count').textContent = pending;
+  $('#done-count').textContent = done;
+  $('#tab-badge').textContent = pending;
+}
+
+function renderSide() {
+  updateCounts();
+  const list = $('#side-list');
+  list.replaceChildren();
+
+  if (ui.sideTab === 'pending') {
+    const pending = requests.filter(r => r.status === 'PENDING');
+    if (pending.length === 0) { list.innerHTML = '<div class="empty">밀린 결재가 없습니다 👏</div>'; return; }
+    for (const r of pending) list.append(buildPendingCard(r));
+  } else {
+    const done = requests.filter(r => r.status !== 'PENDING');
+    if (done.length === 0) { list.innerHTML = '<div class="empty">아직 처리한 건이 없습니다.</div>'; return; }
+    for (const r of done) list.append(buildDoneCard(r));
+  }
+}
+
+function buildPendingCard(r) {
+  const emp = empById(r.empId);
+  const card = document.createElement('div');
+  card.className = 'appr-card' + (r.id === ui.selectedReqId ? ' selected' : '');
+  card.addEventListener('click', (e) => {
+    if (e.target.closest('button')) return;   // 버튼 클릭은 제외
+    ui.selectedReqId = (ui.selectedReqId === r.id) ? null : r.id;
+    renderSide(); renderBody();
+  });
+
+  const sd = sameDayCount(r);
+  const sameDayHtml = sd > 0 ? `<span class="sameday">⚠ 같은 날 연차 ${sd + 1}건</span>` : '';
+  const postHtml = r.postApply ? `<span class="sameday">사후 신청</span>` : '';
+
+  card.innerHTML = `
+    <div class="top">
+      <span class="nm">${emp.name}</span>
+      <span class="job">${emp.job}</span>
+      ${sameDayHtml}${postHtml}
+    </div>
+    <div class="body">${reqTypeText(r)} · ${reqDatesText(r)}</div>
+    <div class="meta">${r.at} 신청 · 잔여 ${r.bal}</div>
+    <div class="actions">
+      <button class="btn-approve">승인</button>
+      <button class="btn-reject">반려</button>
+    </div>`;
+  card.querySelector('.btn-approve').addEventListener('click', () => approve(r.id));
+  card.querySelector('.btn-reject').addEventListener('click', () => openReject(r.id));
+  return card;
+}
+
+function buildDoneCard(r) {
+  const emp = empById(r.empId);
+  const card = document.createElement('div');
+  card.className = 'done-card';
+  const isApproved = r.status === 'APPROVED';
+  card.innerHTML = `
+    <div class="top">
+      <span class="result-pill ${isApproved ? 'approved' : 'rejected'}">${isApproved ? '승인됨' : '반려됨'}</span>
+      <span class="nm" style="font-size:15px;font-weight:800">${emp.name}</span>
+      <span style="font-size:13px;color:var(--ink-sub)">${reqTypeText(r)} · ${reqDatesText(r)}</span>
+    </div>
+    ${r.reason ? `<div class="reason">반려 사유: ${r.reason}</div>` : ''}`;
+  return card;
+}
+
+/* ============================================================
+ * 액션: 승인 / 반려
+ * ============================================================ */
+function approve(reqId) {
+  const r = requests.find(x => x.id === reqId);
+  if (!r || r.status !== 'PENDING') return;
+  r.status = 'APPROVED';
+
+  /* 근무표 셀에 반영 (Phase 2 request.approved → 근무표 반영 개념) */
+  const code = r.type === 'HALF' ? (r.half === 'PM' ? 'HALF_PM' : 'HALF_AM') : 'ANN';
+  for (const d of r.targetDays) schedule[r.empId][d - 1] = code;
+
+  if (ui.selectedReqId === reqId) ui.selectedReqId = null;
+  renderSchedule();
+  renderSide();
+  flashCells(r);   // 반영된 셀 강조
+  toast(`${empById(r.empId).name}님 ${reqTypeText(r)} 승인 · 근무표 반영됨`);
+}
+
+/* 승인 직후 반영 셀에 등장 애니메이션 */
+function flashCells(r) {
+  requestAnimationFrame(() => {
+    for (const d of r.targetDays) {
+      const cell = document.querySelector(`td.cell[data-emp="${r.empId}"][data-day="${d}"] .code`);
+      if (cell) cell.classList.add('just-added');
+    }
+  });
+}
+
+function openReject(reqId) {
+  ui.rejectReqId = reqId;
+  $('#reject-text').value = '';
+  $('#reject-confirm').disabled = true;
+  $('#reject-overlay').classList.add('open');
+  $('#reject-text').focus();
+}
+function closeReject() { $('#reject-overlay').classList.remove('open'); ui.rejectReqId = null; }
+function confirmReject() {
+  const r = requests.find(x => x.id === ui.rejectReqId);
+  const reason = $('#reject-text').value.trim();
+  if (!r || !reason) return;
+  r.status = 'REJECTED';
+  r.reason = reason;
+  if (ui.selectedReqId === r.id) ui.selectedReqId = null;
+  closeReject();
+  renderSide(); renderBody();
+  toast(`${empById(r.empId).name}님 신청 반려 처리`);
+}
+
+/* ============================================================
+ * 토스트
+ * ============================================================ */
+let toastTimer;
+function toast(msg) {
+  const el = $('#toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2600);
+}
+
+/* ============================================================
+ * 이벤트 바인딩
+ * ============================================================ */
+/* 사이드 탭 (대기/처리완료) */
+document.querySelectorAll('.side-tabs button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    ui.sideTab = btn.dataset.tab;
+    document.querySelectorAll('.side-tabs button').forEach(b => b.classList.toggle('active', b === btn));
+    renderSide();
+  });
+});
+
+/* 모바일 탭 (근무표/결재함) */
+document.querySelectorAll('#mobile-tabs button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const view = btn.dataset.view;
+    document.querySelectorAll('#mobile-tabs button').forEach(b => b.classList.toggle('active', b === btn));
+    $('#main-panel').classList.toggle('hide-mobile', view !== 'schedule');
+    $('#side-panel').classList.toggle('hide-mobile', view !== 'approvals');
+  });
+});
+
+/* 반려 모달 */
+$('#reject-text').addEventListener('input', (e) => {
+  $('#reject-confirm').disabled = e.target.value.trim().length === 0;
+});
+$('#reject-cancel').addEventListener('click', closeReject);
+$('#reject-confirm').addEventListener('click', confirmReject);
+$('#reject-overlay').addEventListener('click', (e) => { if (e.target === $('#reject-overlay')) closeReject(); });
+
+/* 근무 코드 안내 모달 */
+$('#code-guide-btn').addEventListener('click', () => $('#guide-overlay').classList.add('open'));
+$('#guide-close').addEventListener('click', () => $('#guide-overlay').classList.remove('open'));
+$('#guide-overlay').addEventListener('click', (e) => { if (e.target === $('#guide-overlay')) $('#guide-overlay').classList.remove('open'); });
+
+/* ============================================================
+ * 초기 렌더 + 모바일 기본 뷰 설정
+ * ============================================================ */
+function applyResponsiveDefault() {
+  const mobile = window.matchMedia('(max-width: 959px)').matches;
+  if (mobile) {
+    $('#main-panel').classList.remove('hide-mobile');
+    $('#side-panel').classList.add('hide-mobile');
+  } else {
+    $('#main-panel').classList.remove('hide-mobile');
+    $('#side-panel').classList.remove('hide-mobile');
+  }
+}
+window.addEventListener('resize', applyResponsiveDefault);
+
+renderSchedule();
+renderSide();
+applyResponsiveDefault();
+</script>
+</body>
+</html>
