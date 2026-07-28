@@ -76,7 +76,17 @@ async function main() {
 
 async function seedApprovalFixtures(facilityId: bigint) {
   // --- 팀 (uq_team_name upsert) ---
-  const teamNames = ['1층팀', '2층팀'];
+  const teamNames = [
+    '총괄',
+    '복지행정팀',
+    '간호재활팀',
+    '요양1팀',
+    '요양2팀',
+    '요양3팀',
+    '요양4팀',
+    '요양5팀',
+    '요양6팀',
+  ];
   const teams: Record<string, bigint> = {};
   for (const [i, name] of teamNames.entries()) {
     const team = await prisma.team.upsert({
@@ -97,7 +107,7 @@ async function seedApprovalFixtures(facilityId: bigint) {
 
   // --- 모바일 기기 등록 로그인용 관리자 발급 코드(로컬 개발용 — C-13/N-10) ---
   // pin_hash는 employee 테이블의 관리자 발급 코드 해시(scrypt, password.util 재사용).
-  // 관리자(1~2, ADMIN)는 웹 로그인 대상이라 코드를 발급하지 않는다 — 종사자(3~8, STAFF)에만 부여.
+  // 관리자(1~2, ADMIN)는 웹 로그인 대상이라 코드를 발급하지 않는다 — 종사자(3~27, STAFF)에만 부여.
   // 등록 성공 시 서버가 소진(null)시키므로, 재테스트하려면 db:seed를 다시 실행한다.
   const staffPinCodes: Record<string, string> = {
     '3': '333333',
@@ -107,32 +117,78 @@ async function seedApprovalFixtures(facilityId: bigint) {
     '7': '777777',
     '8': '888888',
     '9': '999999',
+    '10': '101010',
+    '11': '111111',
+    '12': '121212',
+    '13': '131313',
+    '14': '141414',
+    '15': '151515',
+    '16': '161616',
+    '17': '171717',
+    '18': '181818',
+    '19': '191919',
+    '20': '202020',
+    '21': '212121',
+    '22': '222222',
+    '23': '232323',
+    '24': '242424',
+    '25': '252525',
+    '26': '262626',
+    '27': '272727',
   };
   const staffPinCredentials: Record<string, { pinHash: string }> = {};
   for (const [id, code] of Object.entries(staffPinCodes)) {
     staffPinCredentials[id] = { pinHash: await hashPassword(code) };
   }
 
-  // --- 직원 (고정 id upsert). 1~3 = 결재 권한자(서명 더미 필수 — D-12), 4~8 = 신청자 ---
+  // --- 직원 (고정 id upsert). 1~3 = 결재 권한자(서명 더미 필수 — D-12), 4~9 = 신청자.
+  // 팀 구성은 9개 팀 × 3명(총 27명) — 총괄(관리자+사회복지사), 복지행정팀, 간호재활팀, 요양1~6팀 ---
   const employees = [
-    { id: 1n, name: '김평온', jobRole: 'DIRECTOR', systemRole: 'ADMIN', hireDate: new Date('2015-03-01'), canShiftWork: false, signaturePath: 'signatures/emp1.png' },
-    { id: 2n, name: '박든든', jobRole: 'OFFICE_MANAGER', systemRole: 'ADMIN', hireDate: new Date('2017-05-15'), canShiftWork: false, signaturePath: 'signatures/emp2.png' },
-    { id: 3n, name: '이살핌', jobRole: 'SOCIAL_WORKER', systemRole: 'STAFF', hireDate: new Date('2020-01-06'), canShiftWork: false, signaturePath: 'signatures/emp3.png' },
-    { id: 4n, name: '최정성', jobRole: 'CAREGIVER', systemRole: 'STAFF', hireDate: new Date('2021-04-01'), teamId: teams['1층팀'] },
-    { id: 5n, name: '정보람', jobRole: 'CAREGIVER', systemRole: 'STAFF', hireDate: new Date('2019-09-16'), teamId: teams['1층팀'] },
-    { id: 6n, name: '한슬기', jobRole: 'NURSE_AIDE', systemRole: 'STAFF', hireDate: new Date('2022-02-07'), teamId: teams['2층팀'] },
-    { id: 7n, name: '오다정', jobRole: 'CAREGIVER', systemRole: 'STAFF', hireDate: new Date('2018-11-12'), teamId: teams['2층팀'] },
-    { id: 8n, name: '강마루', jobRole: 'CAREGIVER', systemRole: 'STAFF', hireDate: new Date('2023-06-19'), teamId: teams['2층팀'] },
+    // 총괄 (3) — 결재 권한자
+    { id: 1n, name: '김평온', jobRole: 'DIRECTOR', systemRole: 'ADMIN', hireDate: new Date('2015-03-01'), canShiftWork: false, signaturePath: 'signatures/emp1.png', teamId: teams['총괄'] },
+    { id: 2n, name: '박든든', jobRole: 'OFFICE_MANAGER', systemRole: 'ADMIN', hireDate: new Date('2017-05-15'), canShiftWork: false, signaturePath: 'signatures/emp2.png', teamId: teams['총괄'] },
+    { id: 3n, name: '이살핌', jobRole: 'SOCIAL_WORKER', systemRole: 'STAFF', hireDate: new Date('2020-01-06'), canShiftWork: false, signaturePath: 'signatures/emp3.png', teamId: teams['총괄'] },
+    // 요양1팀 (3)
+    { id: 4n, name: '최정성', jobRole: 'CAREGIVER', systemRole: 'STAFF', hireDate: new Date('2021-04-01'), teamId: teams['요양1팀'] },
+    { id: 5n, name: '정보람', jobRole: 'CAREGIVER', systemRole: 'STAFF', hireDate: new Date('2019-09-16'), teamId: teams['요양1팀'] },
+    { id: 6n, name: '한슬기', jobRole: 'NURSE_AIDE', systemRole: 'STAFF', hireDate: new Date('2022-02-07'), teamId: teams['요양1팀'] },
+    // 요양2팀 (3)
+    { id: 7n, name: '오다정', jobRole: 'CAREGIVER', systemRole: 'STAFF', hireDate: new Date('2018-11-12'), teamId: teams['요양2팀'] },
+    { id: 8n, name: '강마루', jobRole: 'CAREGIVER', systemRole: 'STAFF', hireDate: new Date('2023-06-19'), teamId: teams['요양2팀'] },
     // 입사 1년 미만(D-9 개근 개월 부여 케이스 확인용)
-    { id: 9n, name: '윤새봄', jobRole: 'CAREGIVER', systemRole: 'STAFF', hireDate: new Date('2026-03-02'), teamId: teams['2층팀'] },
+    { id: 9n, name: '윤새봄', jobRole: 'CAREGIVER', systemRole: 'STAFF', hireDate: new Date('2026-03-02'), teamId: teams['요양2팀'] },
+    // 복지행정팀 (3)
+    { id: 10n, name: '임소망', jobRole: 'SOCIAL_WORKER', systemRole: 'STAFF', hireDate: new Date('2020-08-11'), teamId: teams['복지행정팀'] },
+    { id: 11n, name: '서다솜', jobRole: 'SOCIAL_WORKER', systemRole: 'STAFF', hireDate: new Date('2022-05-23'), teamId: teams['복지행정팀'] },
+    { id: 12n, name: '노한결', jobRole: 'CLERK', systemRole: 'STAFF', hireDate: new Date('2024-02-14'), teamId: teams['복지행정팀'] },
+    // 간호재활팀 (3)
+    { id: 13n, name: '문슬아', jobRole: 'NURSE', systemRole: 'STAFF', hireDate: new Date('2019-06-03'), teamId: teams['간호재활팀'] },
+    { id: 14n, name: '배건강', jobRole: 'PHYSICAL_THERAPIST', systemRole: 'STAFF', hireDate: new Date('2021-11-09'), teamId: teams['간호재활팀'] },
+    { id: 15n, name: '신바름', jobRole: 'OCCUPATIONAL_THERAPIST', systemRole: 'STAFF', hireDate: new Date('2023-03-27'), teamId: teams['간호재활팀'] },
+    // 요양3팀 (3)
+    { id: 16n, name: '조은비', jobRole: 'CAREGIVER', systemRole: 'STAFF', hireDate: new Date('2020-04-15'), teamId: teams['요양3팀'] },
+    { id: 17n, name: '남해든', jobRole: 'CAREGIVER', systemRole: 'STAFF', hireDate: new Date('2021-09-08'), teamId: teams['요양3팀'] },
+    { id: 18n, name: '백누리', jobRole: 'NURSE_AIDE', systemRole: 'STAFF', hireDate: new Date('2023-07-19'), teamId: teams['요양3팀'] },
+    // 요양4팀 (3)
+    { id: 19n, name: '구여울', jobRole: 'CAREGIVER', systemRole: 'STAFF', hireDate: new Date('2019-12-02'), teamId: teams['요양4팀'] },
+    { id: 20n, name: '홍바다', jobRole: 'CAREGIVER', systemRole: 'STAFF', hireDate: new Date('2022-10-21'), teamId: teams['요양4팀'] },
+    { id: 21n, name: '유하늘', jobRole: 'NURSE_AIDE', systemRole: 'STAFF', hireDate: new Date('2024-01-30'), teamId: teams['요양4팀'] },
+    // 요양5팀 (3)
+    { id: 22n, name: '남빛나', jobRole: 'CAREGIVER', systemRole: 'STAFF', hireDate: new Date('2018-08-06'), teamId: teams['요양5팀'] },
+    { id: 23n, name: '오소담', jobRole: 'CAREGIVER', systemRole: 'STAFF', hireDate: new Date('2021-02-17'), teamId: teams['요양5팀'] },
+    { id: 24n, name: '임온유', jobRole: 'NURSE_AIDE', systemRole: 'STAFF', hireDate: new Date('2023-05-24'), teamId: teams['요양5팀'] },
+    // 요양6팀 (3)
+    { id: 25n, name: '차은결', jobRole: 'CAREGIVER', systemRole: 'STAFF', hireDate: new Date('2020-01-13'), teamId: teams['요양6팀'] },
+    { id: 26n, name: '안다감', jobRole: 'CAREGIVER', systemRole: 'STAFF', hireDate: new Date('2022-07-04'), teamId: teams['요양6팀'] },
+    { id: 27n, name: '표미소', jobRole: 'NURSE_AIDE', systemRole: 'STAFF', hireDate: new Date('2026-02-16'), teamId: teams['요양6팀'] },
   ] as const;
   for (const emp of employees) {
-    // 로그인 계정은 update에도 넣는다 — 마이그레이션 이전에 만들어진 기존 행에도 반영되도록
+    // 로그인 계정·소속 팀은 update에도 넣는다 — 마이그레이션 이전에 만들어진 기존 행에도 반영되도록
     const credential = adminCredentials[emp.id.toString()] ?? {};
     const pinCredential = staffPinCredentials[emp.id.toString()] ?? {};
     await prisma.employee.upsert({
       where: { id: emp.id },
-      update: { ...credential, ...pinCredential },
+      update: { ...credential, ...pinCredential, teamId: emp.teamId },
       create: { facilityId, ...credential, ...pinCredential, ...emp },
     });
   }
