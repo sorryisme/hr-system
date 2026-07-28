@@ -16,6 +16,12 @@
 --         원천을 substitute_holiday_ledger 로 직접 연결(FK). 편집기 전용 표기(§4.4).
 --   F-03. daily_staffing_rule 초기 시드 예시 추가(목업 하드코딩 임계값의 설정화 — §4.5)
 --
+-- v1.3 내부 보완 (2026-07-28 — 반려/취소 시 근무표 셀 원복, §4.10)
+--   F-04. schedule_entry.pre_approval_snapshot 신설 — 결재 건이 셀을 최초로 덮어쓰기 직전
+--         상태의 스냅샷(JSON). 반려/취소 확정 시 이 값으로 복구하고 비운다. NULL이면 사전에
+--         셀 자체가 없었다는 뜻 — 원복은 삭제. (수동/프리셋 셀을 가반영이 덮어쓴 뒤 반려되어도
+--         원래 근무가 사라지지 않도록 함)
+--
 -- v1.1 → v1.2 변경 (기획서 v3.1 → v3.2 반영)
 --   E-01. 결재선 1~3단계 확장 + 전결(위임전결) 지원 (D-13)
 --         - facility.approval_steps CHECK (1..3)
@@ -550,6 +556,10 @@ CREATE TABLE schedule_entry (
   source_ledger_id    BIGINT UNSIGNED NULL
                       COMMENT '[v1.3] 유대(유) 셀의 "유(이월인정시간,분)" 표기 원천(§4.4, 편집기 전용).
                                substitute_holiday_ledger 참조. 사용예정일 반영 셀에 연결',
+  pre_approval_snapshot JSON NULL
+                      COMMENT '[반려/취소 원복 §4.10] source_request_id 건이 셀을 최초로
+                               덮어쓰기 직전 상태의 스냅샷. 반려/취소 확정 시 이 값으로 복구하고
+                               비운다. NULL이면 사전에 셀 자체가 없었다는 뜻(원복=삭제)',
   PRIMARY KEY (id),
   UNIQUE KEY uq_entry (employee_id, work_date),
   KEY idx_entry_roster_date (roster_id, work_date),

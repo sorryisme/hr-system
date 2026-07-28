@@ -7,6 +7,8 @@ import { JobRole, Prisma } from '@prisma/client';
 import { ApprovalsService } from './approvals.service';
 import { InboxStatusFilter } from './dto/inbox-query.dto';
 import { PrismaService } from '../prisma/prisma.service';
+import { DomainEventBus } from '../events/domain-event-bus';
+import { REQUEST_REVERTED } from '../events/domain-events';
 
 // §3.4 상태머신 전이 규칙 검증. PrismaService는 트랜잭션 델리게이트 목으로 대체한다.
 
@@ -96,6 +98,7 @@ const expectHttpCode = async (
 
 describe('ApprovalsService 상태머신', () => {
   let tx: TxMock;
+  let bus: { publish: jest.Mock };
   let service: ApprovalsService;
 
   beforeEach(() => {
@@ -120,7 +123,11 @@ describe('ApprovalsService 상태머신', () => {
     const prismaMock = {
       $transaction: jest.fn((cb: (t: TxMock) => Promise<unknown>) => cb(tx)),
     };
-    service = new ApprovalsService(prismaMock as unknown as PrismaService);
+    bus = { publish: jest.fn() };
+    service = new ApprovalsService(
+      prismaMock as unknown as PrismaService,
+      bus as unknown as DomainEventBus,
+    );
   });
 
   it('1차 승인 → INTERIM_APPROVED(1), 서명 스냅샷 기재, 잔여 미정산', async () => {
@@ -395,6 +402,19 @@ describe('ApprovalsService 상태머신', () => {
     );
   });
 
+  it('반려 시 근무표 가반영 셀 원복 이벤트(REQUEST_REVERTED)를 발행한다', async () => {
+    tx.approvalRequest.findUnique.mockResolvedValue(transitionRow());
+
+    await service.rejectRequest('1', '3', '해당일 인력 부족');
+
+    expect(bus.publish).toHaveBeenCalledWith(REQUEST_REVERTED, {
+      requestId: 1n,
+      facilityId: 1n,
+      requesterId: 5n,
+      targetDates: ['2026-07-21'],
+    });
+  });
+
   it('SHIFT_CHANGE(leaveDays null) 반려 시 잔여 테이블 미접근', async () => {
     tx.approvalRequest.findUnique.mockResolvedValue(
       transitionRow({ type: 'SHIFT_CHANGE', leaveDays: null }),
@@ -466,13 +486,67 @@ describe('ApprovalsService 상태머신', () => {
       });
       expect(tx.leaveBalance.update).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { employeeId_balanceYear: { employeeId: 5n, balanceYear: 2026 } },
+          where: {
+            employeeId_balanceYear: { employeeId: 5n, balanceYear: 2026 },
+          },
           data: { reserved: { decrement: new Prisma.Decimal('2.0') } },
         }),
       );
       expect(tx.approvalHistory.create).toHaveBeenCalledWith({
         data: containing({ requestId: 1n, action: 'CANCEL' }),
       });
+    });
+
+    it('취소 요청 최종 승인 → 원건이 반영해둔 근무표 셀 원복 이벤트(REQUEST_REVERTED)를 원건 기준으로 발행한다', async () => {
+      const cancelRequest = transitionRow({
+        id: 10n,
+        type: 'CANCEL',
+        refRequestId: 1n,
+        leaveDays: null,
+        requestLines: [line(1, 3n)],
+      });
+      const original = transitionRow({
+        id: 1n,
+        status: 'INTERIM_APPROVED',
+        currentStep: 1,
+        leaveDays: new Prisma.Decimal('2.0'),
+      });
+      tx.approvalRequest.findUnique
+        .mockResolvedValueOnce(cancelRequest)
+        .mockResolvedValueOnce(original);
+
+      await service.approveRequest('10', '3');
+
+      expect(bus.publish).toHaveBeenCalledWith(REQUEST_REVERTED, {
+        requestId: 1n,
+        facilityId: 1n,
+        requesterId: 5n,
+        targetDates: ['2026-07-21'],
+      });
+    });
+
+    it('원건이 이미 다른 경로로 종결된 경우(취소 승인해도) 원복 이벤트를 발행하지 않는다', async () => {
+      const cancelRequest = transitionRow({
+        id: 10n,
+        type: 'CANCEL',
+        refRequestId: 1n,
+        leaveDays: null,
+        requestLines: [line(1, 3n)],
+      });
+      const alreadyFinalized = transitionRow({
+        id: 1n,
+        status: 'REJECTED',
+      });
+      tx.approvalRequest.findUnique
+        .mockResolvedValueOnce(cancelRequest)
+        .mockResolvedValueOnce(alreadyFinalized);
+
+      await service.approveRequest('10', '3');
+
+      expect(bus.publish).not.toHaveBeenCalledWith(
+        REQUEST_REVERTED,
+        expect.anything(),
+      );
     });
 
     it('취소 요청은 결재라인이 1단계이고 결재선 후보 3명 중 누구든 승인 시 즉시 종결된다', async () => {
@@ -542,7 +616,9 @@ describe('ApprovalsService 상태머신', () => {
   });
 
   describe('listRequests', () => {
-    const makePrisma = (grouped: { status: string; _count: { _all: number } }[]) => ({
+    const makePrisma = (
+      grouped: { status: string; _count: { _all: number } }[],
+    ) => ({
       approvalRequest: {
         findMany: jest.fn().mockResolvedValue([]),
         groupBy: jest.fn().mockResolvedValue(grouped),
@@ -551,7 +627,10 @@ describe('ApprovalsService 상태머신', () => {
 
     it('CANCELED 필터는 CANCELED + CANCELED_AFTER_APPROVAL 상태를 조회한다', async () => {
       const prisma = makePrisma([]);
-      const service = new ApprovalsService(prisma as unknown as PrismaService);
+      const service = new ApprovalsService(
+        prisma as unknown as PrismaService,
+        { publish: jest.fn() } as unknown as DomainEventBus,
+      );
 
       await service.listRequests(InboxStatusFilter.CANCELED);
 
@@ -571,7 +650,10 @@ describe('ApprovalsService 상태머신', () => {
         { status: 'CANCELED', _count: { _all: 4 } },
         { status: 'CANCELED_AFTER_APPROVAL', _count: { _all: 1 } },
       ]);
-      const service = new ApprovalsService(prisma as unknown as PrismaService);
+      const service = new ApprovalsService(
+        prisma as unknown as PrismaService,
+        { publish: jest.fn() } as unknown as DomainEventBus,
+      );
 
       const result = await service.listRequests(InboxStatusFilter.CANCELED);
 

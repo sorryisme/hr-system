@@ -662,6 +662,9 @@ model ScheduleEntry {
   sourceRequestId BigInt?             @map("source_request_id") @db.UnsignedBigInt
   /// [v1.3] 유대(유) 셀의 "유(이월인정시간,분)" 표기 원천(§4.4, 편집기 전용). 사용예정일 반영 셀에 연결
   sourceLedgerId  BigInt?             @map("source_ledger_id") @db.UnsignedBigInt
+  /// [반려/취소 원복 §4.10] 이 결재 건(sourceRequestId)이 셀을 최초로 덮어쓰기 직전의 상태 스냅샷.
+  /// 반려/취소 확정 시 이 값으로 복구하고 비운다. NULL이면 사전에 셀 자체가 없었다는 뜻 — 원복은 삭제.
+  preApprovalSnapshot Json?           @map("pre_approval_snapshot")
 
   roster        Roster                   @relation(fields: [rosterId], references: [id])
   employee      Employee                 @relation(fields: [employeeId], references: [id])
