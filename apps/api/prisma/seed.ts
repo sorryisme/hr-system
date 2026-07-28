@@ -397,7 +397,10 @@ async function seedApprovalFixtures(facilityId: bigint) {
 // =============================================================
 // 근무표(Phase 2) 데모 픽스처 — 2026년 7월 (docs/mock-ui/근무표 재현)
 //   GET /rosters 응답 확인용. DDL v1.3 신설 필드(셀 시간 조정·유대 연동·결재 반영)를 시연한다.
-//   모든 인명은 가상 인물이며, 결재 픽스처의 직원(4~9)을 그대로 사용한다.
+//   모든 인명은 가상 인물. canShiftWork=true인 전 직원(4~27, 총괄 3명·복지행정팀
+//   사무직 제외)을 대상으로 한다 — 휴가 승인/반려/취소 → 근무표 반영·원복(§4.10) 테스트용으로
+//   누구에게든 스케줄 셀이 있어야 스냅샷/복원(P1)이 의미가 있다.
+//   근무표는 DRAFT로 생성해 마감결재를 거치지 않은 상태로 둔다(결재 이벤트 반영 경로만 시연).
 // =============================================================
 
 /** @db.Time(0) 매핑용 — 1970-01-01T{hhmm}:00Z Date */
@@ -467,13 +470,46 @@ async function seedRosterFixtures(facilityId: bigint) {
   });
 
   // --- 교대 직원 주간 패턴(dow 0=일 … 6=토). 'N'은 직원별 야간유형(N/NF)으로 확정 ---
+  // 요양1·2팀(4~9)은 결재 픽스처와 맞물린 개별 패턴을 그대로 둔다. 요양3~6팀(16~27)은 같은
+  // 6종 패턴을 순환 배정 — 실제 교대 안배보다 "모든 교대 직원에게 근무표 셀이 있다"가 목적.
+  // 복지행정팀 사무직·간호재활팀 치료사(10~15)는 교대 없이 평일 주간(OFF-D-D-D-D-D-OFF).
+  const dayOnlyPattern = ['OFF', 'D', 'D', 'D', 'D', 'D', 'OFF'] as const;
+  const rotatingPatterns = [
+    { nightType: 'N', pattern: ['D', 'D', 'N', 'N', 'OFF', 'OFF', 'D'] },
+    { nightType: 'N', pattern: ['N', 'N', 'OFF', 'D', 'D', 'D', 'OFF'] },
+    { nightType: 'D', pattern: ['D', 'D', 'OFF', 'D', 'D', 'OFF', 'D'] },
+    { nightType: 'NF', pattern: ['N', 'N', 'N', 'OFF', 'OFF', 'N', 'N'] },
+    { nightType: 'N', pattern: ['OFF', 'D', 'D', 'N', 'N', 'OFF', 'D'] },
+    { nightType: 'NF', pattern: ['OFF', 'N', 'N', 'OFF', 'D', 'D', 'D'] },
+  ] as const;
+
   const shiftEmployees = [
-    { id: 4n, nightType: 'N', pattern: ['D', 'D', 'N', 'N', 'OFF', 'OFF', 'D'] },
-    { id: 5n, nightType: 'N', pattern: ['N', 'N', 'OFF', 'D', 'D', 'D', 'OFF'] },
-    { id: 6n, nightType: 'D', pattern: ['D', 'D', 'OFF', 'D', 'D', 'OFF', 'D'] }, // 간호조무사(주간 위주)
-    { id: 7n, nightType: 'NF', pattern: ['N', 'N', 'N', 'OFF', 'OFF', 'N', 'N'] },
-    { id: 8n, nightType: 'N', pattern: ['OFF', 'D', 'D', 'N', 'N', 'OFF', 'D'] },
-    { id: 9n, nightType: 'NF', pattern: ['OFF', 'N', 'N', 'OFF', 'D', 'D', 'D'] },
+    { id: 4n, ...rotatingPatterns[0] },
+    { id: 5n, ...rotatingPatterns[1] },
+    { id: 6n, nightType: 'D', pattern: rotatingPatterns[2].pattern }, // 간호조무사(주간 위주)
+    { id: 7n, ...rotatingPatterns[3] },
+    { id: 8n, ...rotatingPatterns[4] },
+    { id: 9n, ...rotatingPatterns[5] },
+    // 복지행정팀·간호재활팀(사무직·치료사, 교대 없음)
+    { id: 10n, nightType: 'D', pattern: dayOnlyPattern },
+    { id: 11n, nightType: 'D', pattern: dayOnlyPattern },
+    { id: 12n, nightType: 'D', pattern: dayOnlyPattern },
+    { id: 13n, nightType: 'D', pattern: dayOnlyPattern },
+    { id: 14n, nightType: 'D', pattern: dayOnlyPattern },
+    { id: 15n, nightType: 'D', pattern: dayOnlyPattern },
+    // 요양3~6팀(교대) — 요양1·2팀과 동일한 6종 패턴을 순환 배정
+    { id: 16n, ...rotatingPatterns[0] },
+    { id: 17n, ...rotatingPatterns[1] },
+    { id: 18n, nightType: 'D', pattern: rotatingPatterns[2].pattern },
+    { id: 19n, ...rotatingPatterns[3] },
+    { id: 20n, ...rotatingPatterns[4] },
+    { id: 21n, ...rotatingPatterns[5] },
+    { id: 22n, ...rotatingPatterns[0] },
+    { id: 23n, ...rotatingPatterns[1] },
+    { id: 24n, nightType: 'D', pattern: rotatingPatterns[2].pattern },
+    { id: 25n, ...rotatingPatterns[3] },
+    { id: 26n, ...rotatingPatterns[4] },
+    { id: 27n, ...rotatingPatterns[5] },
   ] as const;
 
   // --- 동적 표기 예시(empId-day) — 결재 반영·시간 조정·유대 셀 시연 ---
