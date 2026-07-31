@@ -103,6 +103,22 @@ export class RosterStateService {
     }
 
     await this.prisma.$transaction(async (tx) => {
+      // 동시성 가드: loadOwned로 상태를 확인한 시점과 이 트랜잭션 시작 사이에 다른 요청이
+      // 마감 상신/마감(CLOSING_APPROVAL·CLOSED)으로 전이시켰을 수 있다. status를 WHERE
+      // 조건에 포함한 UPDATE는 DB 행 잠금 하에 원자적으로 검사되므로, 그 사이 상태가
+      // 바뀌었다면 count=0으로 감지해 셀 쓰기 전에 즉시 중단한다.
+      const guard = await tx.roster.updateMany({
+        where: { id: roster.id, status: roster.status },
+        data: { status: roster.status },
+      });
+      if (guard.count === 0) {
+        throw new ConflictException({
+          code: 'ROSTER_STATUS_CHANGED',
+          message:
+            '처리 중 근무표 상태가 변경되었습니다. 새로고침 후 다시 시도해 주세요.',
+        });
+      }
+
       for (const n of normalized) {
         // TODO(D-21): 이미 지난 일자(달력 경과일) 변경은 결재 필요(사유 기재) — 결재 유형·결재선 확정 대기.
         // rosterId를 update에도 명시해, (직원, 날짜) 셀을 항상 이 근무표로 귀속시킨다(교차 근무표 오염 방지).
