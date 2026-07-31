@@ -464,7 +464,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/ShiftTypeSummaryDto"
+                    "$ref": "#/components/schemas/RosterShiftTypeSummaryDto"
                   }
                 }
               }
@@ -853,22 +853,16 @@
       "ShiftTypeSummaryDto": {
         "type": "object",
         "properties": {
-          "code": {
-            "type": "string",
-            "description": "shift_type.code"
+          "id": {
+            "type": "string"
           },
           "label": {
             "type": "string"
-          },
-          "cellLabel": {
-            "type": "string",
-            "nullable": true
           }
         },
         "required": [
-          "code",
-          "label",
-          "cellLabel"
+          "id",
+          "label"
         ]
       },
       "RequestListItemDto": {
@@ -1655,6 +1649,27 @@
           "cycleDays",
           "teamCount",
           "items"
+        ]
+      },
+      "RosterShiftTypeSummaryDto": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "shift_type.code"
+          },
+          "label": {
+            "type": "string"
+          },
+          "cellLabel": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "code",
+          "label",
+          "cellLabel"
         ]
       },
       "RosterQueryDto": {

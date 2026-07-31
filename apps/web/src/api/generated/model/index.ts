@@ -42,6 +42,7 @@ export * from './rosterEmployeeRowDto';
 export * from './rosterEntryInputDto';
 export * from './rosterQueryDto';
 export * from './rosterResponseDto';
+export * from './rosterShiftTypeSummaryDto';
 export * from './rosterStatus';
 export * from './rosterTeamGroupDto';
 export * from './rosterTransitionResultDto';

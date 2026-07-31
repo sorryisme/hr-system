@@ -43,10 +43,10 @@ import type {
   RequestListResponseDto,
   RosterQueryDto,
   RosterResponseDto,
+  RosterShiftTypeSummaryDto,
   RosterTransitionResultDto,
   SessionUserDto,
   ShiftPatternPresetSummaryDto,
-  ShiftTypeSummaryDto,
   UpdateEntriesDto
 } from './model';
 
@@ -1559,7 +1559,7 @@ export function useListPresets<TData = Awaited<ReturnType<typeof listPresets>>, 
 
 
 export type listShiftTypesResponse200 = {
-  data: ShiftTypeSummaryDto[]
+  data: RosterShiftTypeSummaryDto[]
   status: 200
 }
 
