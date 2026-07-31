@@ -452,6 +452,30 @@
         ]
       }
     },
+    "/api/rosters/shift-types": {
+      "get": {
+        "operationId": "listShiftTypes",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ShiftTypeSummaryDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "rosters"
+        ]
+      }
+    },
     "/api/rosters/{id}/entries": {
       "patch": {
         "operationId": "updateEntries",
@@ -829,16 +853,22 @@
       "ShiftTypeSummaryDto": {
         "type": "object",
         "properties": {
-          "id": {
-            "type": "string"
+          "code": {
+            "type": "string",
+            "description": "shift_type.code"
           },
           "label": {
             "type": "string"
+          },
+          "cellLabel": {
+            "type": "string",
+            "nullable": true
           }
         },
         "required": [
-          "id",
-          "label"
+          "code",
+          "label",
+          "cellLabel"
         ]
       },
       "RequestListItemDto": {

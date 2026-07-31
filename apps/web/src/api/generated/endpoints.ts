@@ -46,6 +46,7 @@ import type {
   RosterTransitionResultDto,
   SessionUserDto,
   ShiftPatternPresetSummaryDto,
+  ShiftTypeSummaryDto,
   UpdateEntriesDto
 } from './model';
 
@@ -1545,6 +1546,113 @@ export function useListPresets<TData = Awaited<ReturnType<typeof listPresets>>, 
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
   const queryOptions = getListPresetsQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export type listShiftTypesResponse200 = {
+  data: ShiftTypeSummaryDto[]
+  status: 200
+}
+
+export type listShiftTypesResponseSuccess = (listShiftTypesResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listShiftTypesResponse = (listShiftTypesResponseSuccess)
+
+export const getListShiftTypesUrl = () => {
+
+
+
+
+  return `/api/rosters/shift-types`
+}
+
+export const listShiftTypes = async ( options?: RequestInit): Promise<listShiftTypesResponse> => {
+
+  return customFetch<listShiftTypesResponse>(getListShiftTypesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListShiftTypesQueryKey = () => {
+    return [
+    `/api/rosters/shift-types`
+    ] as const;
+    }
+
+
+export const getListShiftTypesQueryOptions = <TData = Awaited<ReturnType<typeof listShiftTypes>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listShiftTypes>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListShiftTypesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listShiftTypes>>> = ({ signal }) => listShiftTypes({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listShiftTypes>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListShiftTypesQueryResult = NonNullable<Awaited<ReturnType<typeof listShiftTypes>>>
+export type ListShiftTypesQueryError = unknown
+
+
+export function useListShiftTypes<TData = Awaited<ReturnType<typeof listShiftTypes>>, TError = unknown>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listShiftTypes>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listShiftTypes>>,
+          TError,
+          Awaited<ReturnType<typeof listShiftTypes>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListShiftTypes<TData = Awaited<ReturnType<typeof listShiftTypes>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listShiftTypes>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listShiftTypes>>,
+          TError,
+          Awaited<ReturnType<typeof listShiftTypes>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListShiftTypes<TData = Awaited<ReturnType<typeof listShiftTypes>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listShiftTypes>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useListShiftTypes<TData = Awaited<ReturnType<typeof listShiftTypes>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listShiftTypes>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListShiftTypesQueryOptions(options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

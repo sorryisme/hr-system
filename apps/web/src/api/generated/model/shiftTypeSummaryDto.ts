@@ -6,6 +6,9 @@
  */
 
 export interface ShiftTypeSummaryDto {
-  id: string;
+  /** shift_type.code */
+  code: string;
   label: string;
+  /** @nullable */
+  cellLabel: string | null;
 }
