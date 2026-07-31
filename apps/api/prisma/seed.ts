@@ -33,10 +33,18 @@ function calculateAnnualLeaveGrant(hireDate: Date, balanceYear: number, asOf: Da
 }
 
 async function main() {
+  // 출퇴근 GPS 태그 테스트용 좌표(서울시청 인근, 임의값) + 반경/여유시간/관리자 호출번호(A-6)
+  const facilityGpsSettings = {
+    gpsLat: '37.5665',
+    gpsLng: '126.9780',
+    gpsRadiusM: 100,
+    tagMarginMinutes: 30,
+    adminCallPhone: '031-283-3211',
+  };
   const facility = await prisma.facility.upsert({
     where: { id: 1n },
-    update: {},
-    create: { id: 1n, name: '샘플요양원', capacity: 60 },
+    update: facilityGpsSettings,
+    create: { id: 1n, name: '샘플요양원', capacity: 60, ...facilityGpsSettings },
   });
 
   // §4.7 확정 근무유형표(DDL v1.2 초기 데이터) 기준. recognizedMinutes: 주간=480, 야간(주야비)=580(9h40m),

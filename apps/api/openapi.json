@@ -221,6 +221,89 @@
         ]
       }
     },
+    "/api/attendance/today": {
+      "get": {
+        "operationId": "getToday",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttendanceTodayResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "attendance"
+        ]
+      }
+    },
+    "/api/attendance/clock-in": {
+      "post": {
+        "operationId": "clockIn",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClockTagRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClockTagResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "attendance"
+        ]
+      }
+    },
+    "/api/attendance/clock-out": {
+      "post": {
+        "operationId": "clockOut",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClockTagRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClockTagResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "attendance"
+        ]
+      }
+    },
     "/api/devices/register": {
       "post": {
         "operationId": "register",
@@ -1201,6 +1284,99 @@
         },
         "required": [
           "comment"
+        ]
+      },
+      "AttendanceStatus": {
+        "type": "string",
+        "enum": [
+          "CLOCKED_OUT",
+          "CLOCKED_IN"
+        ]
+      },
+      "AttendanceShiftSummaryDto": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "startTime": {
+            "type": "string",
+            "nullable": true
+          },
+          "endTime": {
+            "type": "string",
+            "nullable": true
+          },
+          "crossesMidnight": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "label",
+          "startTime",
+          "endTime",
+          "crossesMidnight"
+        ]
+      },
+      "AttendanceTodayResponseDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AttendanceStatus"
+              }
+            ]
+          },
+          "clockInAt": {
+            "type": "string",
+            "nullable": true
+          },
+          "shift": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AttendanceShiftSummaryDto"
+              }
+            ]
+          },
+          "adminCallPhone": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "status",
+          "clockInAt",
+          "shift",
+          "adminCallPhone"
+        ]
+      },
+      "ClockTagRequestDto": {
+        "type": "object",
+        "properties": {
+          "lat": {
+            "type": "number"
+          },
+          "lng": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "lat",
+          "lng"
+        ]
+      },
+      "ClockTagResponseDto": {
+        "type": "object",
+        "properties": {
+          "clockAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "clockAt"
         ]
       },
       "RegisterDeviceDto": {
