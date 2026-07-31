@@ -10,6 +10,7 @@ import {
 import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { CurrentUser, RequirePermissions } from '../auth/decorators';
 import { SessionUserDto } from '../auth/dto/session-user.dto';
+import { ApplyPresetDto, ApplyPresetResultDto } from './dto/apply-preset.dto';
 import { RosterQueryDto } from './dto/roster-query.dto';
 import { RosterResponseDto } from './dto/roster-response.dto';
 import {
@@ -17,6 +18,7 @@ import {
   RejectCloseDto,
   RosterTransitionResultDto,
 } from './dto/roster-transition.dto';
+import { ShiftPatternPresetSummaryDto } from './dto/shift-pattern-preset.dto';
 import { UpdateEntriesDto } from './dto/update-entries.dto';
 import { RosterService } from './roster.service';
 import { RosterStateService } from './roster-state.service';
@@ -41,6 +43,16 @@ export class RosterController {
     @CurrentUser() user: SessionUserDto,
   ): Promise<RosterResponseDto> {
     return this.rosterService.getRoster(user.facilityId, query.yearMonth);
+  }
+
+  /// 프리셋 목록(§4.6) — 프리셋 적용 다이얼로그 선택지
+  @Get('shift-pattern-presets')
+  @RequirePermissions('roster:read')
+  @ApiOkResponse({ type: [ShiftPatternPresetSummaryDto] })
+  listPresets(
+    @CurrentUser() user: SessionUserDto,
+  ): Promise<ShiftPatternPresetSummaryDto[]> {
+    return this.rosterService.listPresets(user.facilityId);
   }
 
   @Post()
@@ -78,6 +90,18 @@ export class RosterController {
       user.facilityId,
       body.entries,
     );
+  }
+
+  /// 프리셋 적용(§4.6/§4.8): 직원 행 우클릭 → 패턴 + 조 + 시작일 + 적용 기간
+  @Post(':id/apply-preset')
+  @RequirePermissions('roster:write')
+  @ApiOkResponse({ type: ApplyPresetResultDto })
+  applyPreset(
+    @Param('id') id: string,
+    @Body() body: ApplyPresetDto,
+    @CurrentUser() user: SessionUserDto,
+  ): Promise<ApplyPresetResultDto> {
+    return this.rosterStateService.applyPreset(id, user.facilityId, body);
   }
 
   /// 작성 완료: DRAFT → COMPLETED (검증 스냅샷)

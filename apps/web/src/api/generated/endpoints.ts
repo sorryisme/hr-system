@@ -24,6 +24,8 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  ApplyPresetDto,
+  ApplyPresetResultDto,
   ApproveRequestDto,
   CancelLeaveRequestResponseDto,
   CloseRosterDto,
@@ -43,6 +45,7 @@ import type {
   RosterResponseDto,
   RosterTransitionResultDto,
   SessionUserDto,
+  ShiftPatternPresetSummaryDto,
   UpdateEntriesDto
 } from './model';
 
@@ -1447,6 +1450,113 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       return useMutation(getCreateRosterMutationOptions(options), queryClient);
     }
 
+export type listPresetsResponse200 = {
+  data: ShiftPatternPresetSummaryDto[]
+  status: 200
+}
+
+export type listPresetsResponseSuccess = (listPresetsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listPresetsResponse = (listPresetsResponseSuccess)
+
+export const getListPresetsUrl = () => {
+
+
+
+
+  return `/api/rosters/shift-pattern-presets`
+}
+
+export const listPresets = async ( options?: RequestInit): Promise<listPresetsResponse> => {
+
+  return customFetch<listPresetsResponse>(getListPresetsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListPresetsQueryKey = () => {
+    return [
+    `/api/rosters/shift-pattern-presets`
+    ] as const;
+    }
+
+
+export const getListPresetsQueryOptions = <TData = Awaited<ReturnType<typeof listPresets>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listPresets>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListPresetsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listPresets>>> = ({ signal }) => listPresets({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listPresets>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListPresetsQueryResult = NonNullable<Awaited<ReturnType<typeof listPresets>>>
+export type ListPresetsQueryError = unknown
+
+
+export function useListPresets<TData = Awaited<ReturnType<typeof listPresets>>, TError = unknown>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listPresets>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listPresets>>,
+          TError,
+          Awaited<ReturnType<typeof listPresets>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListPresets<TData = Awaited<ReturnType<typeof listPresets>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listPresets>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listPresets>>,
+          TError,
+          Awaited<ReturnType<typeof listPresets>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListPresets<TData = Awaited<ReturnType<typeof listPresets>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listPresets>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useListPresets<TData = Awaited<ReturnType<typeof listPresets>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listPresets>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListPresetsQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
 export type updateEntriesResponse200 = {
   data: RosterTransitionResultDto
   status: 200
@@ -1523,6 +1633,84 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getUpdateEntriesMutationOptions(options), queryClient);
+    }
+
+export type applyPresetResponse200 = {
+  data: ApplyPresetResultDto
+  status: 200
+}
+
+export type applyPresetResponseSuccess = (applyPresetResponse200) & {
+  headers: Headers;
+};
+;
+
+export type applyPresetResponse = (applyPresetResponseSuccess)
+
+export const getApplyPresetUrl = (id: string,) => {
+
+
+
+
+  return `/api/rosters/${id}/apply-preset`
+}
+
+export const applyPreset = async (id: string,
+    applyPresetDto: ApplyPresetDto, options?: RequestInit): Promise<applyPresetResponse> => {
+
+  return customFetch<applyPresetResponse>(getApplyPresetUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(applyPresetDto)
+  }
+);}
+
+
+
+
+
+export const getApplyPresetMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof applyPreset>>, TError,{id: string;data: ApplyPresetDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof applyPreset>>, TError,{id: string;data: ApplyPresetDto}, TContext> => {
+
+const mutationKey = ['applyPreset'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof applyPreset>>, {id: string;data: ApplyPresetDto}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  applyPreset(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ApplyPresetMutationResult = NonNullable<Awaited<ReturnType<typeof applyPreset>>>
+    export type ApplyPresetMutationBody = ApplyPresetDto
+    export type ApplyPresetMutationError = unknown
+
+    export const useApplyPreset = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof applyPreset>>, TError,{id: string;data: ApplyPresetDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof applyPreset>>,
+        TError,
+        {id: string;data: ApplyPresetDto},
+        TContext
+      > => {
+      return useMutation(getApplyPresetMutationOptions(options), queryClient);
     }
 
 export type completeResponse200 = {

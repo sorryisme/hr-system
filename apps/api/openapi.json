@@ -428,6 +428,30 @@
         ]
       }
     },
+    "/api/rosters/shift-pattern-presets": {
+      "get": {
+        "operationId": "listPresets",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ShiftPatternPresetSummaryDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "rosters"
+        ]
+      }
+    },
     "/api/rosters/{id}/entries": {
       "patch": {
         "operationId": "updateEntries",
@@ -458,6 +482,46 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/RosterTransitionResultDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "rosters"
+        ]
+      }
+    },
+    "/api/rosters/{id}/apply-preset": {
+      "post": {
+        "operationId": "applyPreset",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplyPresetDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplyPresetResultDto"
                 }
               }
             }
@@ -1503,6 +1567,66 @@
           "summary"
         ]
       },
+      "ShiftPatternItemDto": {
+        "type": "object",
+        "properties": {
+          "teamNo": {
+            "type": "number",
+            "description": "조 번호(1=A조, 2=B조, 3=C조 …)"
+          },
+          "dayIndex": {
+            "type": "number",
+            "description": "주기 내 일차(1..cycleDays)"
+          },
+          "shiftCode": {
+            "type": "string",
+            "description": "shift_type.code"
+          },
+          "cellLabel": {
+            "type": "object",
+            "description": "shift_type.cell_label",
+            "nullable": true
+          }
+        },
+        "required": [
+          "teamNo",
+          "dayIndex",
+          "shiftCode",
+          "cellLabel"
+        ]
+      },
+      "ShiftPatternPresetSummaryDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "cycleDays": {
+            "type": "number",
+            "description": "패턴 주기(주야비=6)"
+          },
+          "teamCount": {
+            "type": "number",
+            "description": "조 수(주야비=3: A/B/C)"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ShiftPatternItemDto"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "cycleDays",
+          "teamCount",
+          "items"
+        ]
+      },
       "RosterQueryDto": {
         "type": "object",
         "properties": {
@@ -1616,6 +1740,84 @@
           "id",
           "status",
           "violations"
+        ]
+      },
+      "ApplyPresetDto": {
+        "type": "object",
+        "properties": {
+          "presetId": {
+            "type": "string",
+            "description": "shift_pattern_preset.id"
+          },
+          "teamNo": {
+            "type": "number",
+            "description": "조 번호(1=A조, 2=B조, 3=C조 …)"
+          },
+          "employeeIds": {
+            "description": "적용 대상 직원 id 목록",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "startDate": {
+            "type": "string",
+            "description": "YYYY-MM-DD, 적용 시작일"
+          },
+          "endDate": {
+            "type": "string",
+            "description": "YYYY-MM-DD, 적용 종료일(포함)"
+          }
+        },
+        "required": [
+          "presetId",
+          "teamNo",
+          "employeeIds",
+          "startDate"
+        ]
+      },
+      "ApplyPresetSkipDto": {
+        "type": "object",
+        "properties": {
+          "employeeId": {
+            "type": "string"
+          },
+          "workDate": {
+            "type": "string",
+            "description": "YYYY-MM-DD"
+          },
+          "reason": {
+            "type": "string",
+            "description": "건너뛴 사유 코드(예: PROTECTED_CELL)"
+          }
+        },
+        "required": [
+          "employeeId",
+          "workDate",
+          "reason"
+        ]
+      },
+      "ApplyPresetResultDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "appliedCount": {
+            "type": "number",
+            "description": "적용/갱신된 셀 수"
+          },
+          "skipped": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApplyPresetSkipDto"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "appliedCount",
+          "skipped"
         ]
       },
       "CloseRosterDto": {

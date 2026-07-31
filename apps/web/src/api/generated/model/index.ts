@@ -5,6 +5,9 @@
  * OpenAPI spec version: 0.0.1
  */
 
+export * from './applyPresetDto';
+export * from './applyPresetResultDto';
+export * from './applyPresetSkipDto';
 export * from './approvalAction';
 export * from './approvalRequestStatus';
 export * from './approvalRequestType';
@@ -44,6 +47,9 @@ export * from './rosterTeamGroupDto';
 export * from './rosterTransitionResultDto';
 export * from './scheduleEntrySource';
 export * from './sessionUserDto';
+export * from './shiftPatternItemDto';
+export * from './shiftPatternItemDtoCellLabel';
+export * from './shiftPatternPresetSummaryDto';
 export * from './shiftTypeSummaryDto';
 export * from './systemRole';
 export * from './updateEntriesDto';
