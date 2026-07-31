@@ -12,6 +12,7 @@ import {
   RosterResponseDto,
   RosterTeamGroupDto,
 } from './dto/roster-response.dto';
+import { ShiftPatternPresetSummaryDto } from './dto/shift-pattern-preset.dto';
 
 /// 근무표 셀 조회 시 함께 읽는 관계. shiftType의 분류 필드(countsAsWork/crossesMidnight)는
 /// 하단 요약(근무 인원·요양보호사 주/야) 계산에 쓰인다.
@@ -130,15 +131,40 @@ export class RosterService {
   }
 
   // ---------------------------------------------------------------
-  // 편집·상태머신 엔드포인트(§4.8)는 후속 슬라이스에서 구현한다.
-  //   PATCH /rosters/:id/entries        — 셀 다건 편집(COMPLETED→DRAFT 복귀)
-  //   POST  /rosters/:id/apply-preset   — 프리셋 적용(§4.6 월경계 연속성)
-  //   POST  /rosters/:id/complete       — DRAFT→COMPLETED(검증 스냅샷)
-  //   POST  /rosters/:id/submit-close   — COMPLETED→CLOSING_APPROVAL
-  //   POST  /rosters/:id/close          — CLOSING_APPROVAL→CLOSED(위반 시 강행 사유 D-19)
-  //   POST  /rosters/:id/reject-close   — CLOSING_APPROVAL→DRAFT
-  // 결재 승인 이벤트(request.approved/step_approved) 구독 → 셀 반영(source=APPROVAL)도 이때 추가.
-  // 선행 확정: D-21(지난 일자 변경 결재), roster:write/close 권한 차등(§1.3).
+  // GET /rosters/shift-pattern-presets — 프리셋 적용 다이얼로그의 선택지(§4.6)
+  // ---------------------------------------------------------------
+  async listPresets(
+    facilityId: string,
+  ): Promise<ShiftPatternPresetSummaryDto[]> {
+    const facility = this.parseId(facilityId);
+    const presets = await this.prisma.shiftPatternPreset.findMany({
+      where: { facilityId: facility },
+      include: {
+        items: {
+          include: { shiftType: { select: { code: true, cellLabel: true } } },
+          orderBy: [{ teamNo: 'asc' }, { dayIndex: 'asc' }],
+        },
+      },
+      orderBy: { name: 'asc' },
+    });
+    return presets.map((p) => ({
+      id: p.id.toString(),
+      name: p.name,
+      cycleDays: p.cycleDays,
+      teamCount: p.teamCount,
+      items: p.items.map((i) => ({
+        teamNo: i.teamNo,
+        dayIndex: i.dayIndex,
+        shiftCode: i.shiftType.code,
+        cellLabel: i.shiftType.cellLabel,
+      })),
+    }));
+  }
+
+  // ---------------------------------------------------------------
+  // 편집·상태머신·프리셋 적용(§4.6/§4.8)은 RosterStateService, 결재 승인 이벤트 구독 반영
+  // (source=APPROVAL)은 RosterReflectionService가 담당한다.
+  // 선행 확정 대기: D-21(지난 일자 변경 결재), roster:write/close 권한 차등(§1.3).
   // ---------------------------------------------------------------
 
   // ---------------------------------------------------------------

@@ -1,7 +1,14 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import type { RosterCellDto, RosterResponseDto } from '@/api/generated/model'
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from '@/components/ui/context-menu'
 import { JOB_ROLE_LABELS } from '@/features/approvals/labels'
 import { cn } from '@/lib/utils'
+import { ApplyPresetDialog, type PresetTarget } from './apply-preset-dialog'
 import { CATEGORY_CHIP_CLASS, shiftCategory, subholLabel } from './labels'
 
 const DOW_KR = ['일', '월', '화', '수', '목', '금', '토']
@@ -29,6 +36,9 @@ function pad2(n: number): string {
 /** 엑셀형 근무표: 직원(세로) × 날짜(가로). 팀 구분행 + 하단 요약/과부족행 포함 */
 export function ScheduleGrid({ roster, highlight }: Props) {
   const [year, month] = roster.yearMonth.split('-').map(Number)
+  const [presetTarget, setPresetTarget] = useState<PresetTarget | null>(null)
+  // 편집 가능 상태(§4.8)에서만 프리셋 적용 허용 — CLOSED/CLOSING_APPROVAL은 결재 경유·상신 취소 후에만
+  const canEdit = roster.status === 'DRAFT' || roster.status === 'COMPLETED'
 
   const days = useMemo<DayMeta[]>(() => {
     const list: DayMeta[] = []
@@ -104,6 +114,8 @@ export function ScheduleGrid({ roster, highlight }: Props) {
               cellMap={cellMap}
               highlight={highlight}
               stickyNameClass={stickyNameClass}
+              canEdit={canEdit}
+              onApplyPreset={setPresetTarget}
             />
           ))}
         </tbody>
@@ -131,6 +143,14 @@ export function ScheduleGrid({ roster, highlight }: Props) {
           />
         </tfoot>
       </table>
+
+      <ApplyPresetDialog
+        rosterId={roster.id}
+        yearMonth={roster.yearMonth}
+        daysInMonth={roster.daysInMonth}
+        employee={presetTarget}
+        onOpenChange={(open) => !open && setPresetTarget(null)}
+      />
     </div>
   )
 }
@@ -141,12 +161,16 @@ function TeamGroup({
   cellMap,
   highlight,
   stickyNameClass,
+  canEdit,
+  onApplyPreset,
 }: {
   team: RosterResponseDto['teams'][number]
   days: DayMeta[]
   cellMap: Map<string, RosterCellDto>
   highlight?: CellHighlight | null
   stickyNameClass: string
+  canEdit: boolean
+  onApplyPreset: (target: PresetTarget) => void
 }) {
   return (
     <>
@@ -171,10 +195,30 @@ function TeamGroup({
                 rowHighlighted && 'bg-warning/10',
               )}
             >
-              <div className="text-sm font-bold text-foreground">{emp.name}</div>
-              <div className="text-[11px] font-medium text-muted-foreground">
-                {JOB_ROLE_LABELS[emp.jobRole]}
-              </div>
+              {canEdit ? (
+                <ContextMenu>
+                  <ContextMenuTrigger className="block cursor-context-menu">
+                    <div className="text-sm font-bold text-foreground">{emp.name}</div>
+                    <div className="text-[11px] font-medium text-muted-foreground">
+                      {JOB_ROLE_LABELS[emp.jobRole]}
+                    </div>
+                  </ContextMenuTrigger>
+                  <ContextMenuContent>
+                    <ContextMenuItem
+                      onClick={() => onApplyPreset({ id: emp.id, name: emp.name })}
+                    >
+                      프리셋 적용…
+                    </ContextMenuItem>
+                  </ContextMenuContent>
+                </ContextMenu>
+              ) : (
+                <>
+                  <div className="text-sm font-bold text-foreground">{emp.name}</div>
+                  <div className="text-[11px] font-medium text-muted-foreground">
+                    {JOB_ROLE_LABELS[emp.jobRole]}
+                  </div>
+                </>
+              )}
             </td>
             {days.map((d) => {
               const cell = cellMap.get(`${emp.id}|${d.workDate}`)

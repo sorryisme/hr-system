@@ -65,8 +65,53 @@ async function main() {
     });
   }
 
+  await seedShiftPatternPresets(facility.id);
   await seedApprovalFixtures(facility.id);
   await seedRosterFixtures(facility.id);
+}
+
+// =============================================================
+// 근무 패턴 프리셋(§4.6) — 프리셋 적용 다이얼로그(웹) 데모용 1건.
+// 주야비 3조 2교대: A조 주·주·야·야·휴·휴 / B조 휴·휴·주·주·야·야 / C조 야·야·휴·휴·주·주
+// =============================================================
+
+async function seedShiftPatternPresets(facilityId: bigint) {
+  const name = '주야비 3조 2교대';
+  const existing = await prisma.shiftPatternPreset.findFirst({
+    where: { facilityId, name },
+  });
+  if (existing) return;
+
+  const shiftTypeRows = await prisma.shiftType.findMany({
+    where: { facilityId, code: { in: ['D', 'N', 'OFF'] } },
+    select: { id: true, code: true },
+  });
+  const shiftId = new Map(shiftTypeRows.map((s) => [s.code, s.id]));
+
+  const teamPatterns = [
+    ['D', 'D', 'N', 'N', 'OFF', 'OFF'], // 1=A조
+    ['OFF', 'OFF', 'D', 'D', 'N', 'N'], // 2=B조
+    ['N', 'N', 'OFF', 'OFF', 'D', 'D'], // 3=C조
+  ];
+
+  await prisma.shiftPatternPreset.create({
+    data: {
+      facilityId,
+      name,
+      cycleDays: 6,
+      teamCount: 3,
+      items: {
+        create: teamPatterns.flatMap((pattern, teamIdx) =>
+          pattern.map((code, dayIdx) => ({
+            teamNo: teamIdx + 1,
+            dayIndex: dayIdx + 1,
+            shiftTypeId: shiftId.get(code)!,
+          })),
+        ),
+      },
+    },
+  });
+  console.log(`근무 패턴 프리셋 시드 완료: ${name}`);
 }
 
 // =============================================================

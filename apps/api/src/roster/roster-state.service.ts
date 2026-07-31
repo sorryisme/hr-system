@@ -14,6 +14,11 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
+  ApplyPresetDto,
+  ApplyPresetResultDto,
+  ApplyPresetSkipDto,
+} from './dto/apply-preset.dto';
+import {
   RosterTransitionResultDto,
   ValidationFindingDto,
 } from './dto/roster-transition.dto';
@@ -149,6 +154,220 @@ export class RosterStateService {
       `근무표 셀 편집: roster ${roster.id}, ${entries.length}건, status=${status}`,
     );
     return { id: roster.id.toString(), status, violations: [] };
+  }
+
+  // ---------------------------------------------------------------
+  // 프리셋 적용 — 직원별 근무 패턴 일괄 입력(§4.6/§4.8). COMPLETED에서 적용 시 DRAFT 복귀.
+  // 승인 반영(APPROVAL)·수동 편집(MANUAL) 셀은 관리자 의도적 확정이므로 덮어쓰지 않고 건너뛴다
+  // (DDL v1.3 schedule_entry 코멘트 — "승인 연차가 있는 셀은 프리셋이 덮어쓰지 않음").
+  // ---------------------------------------------------------------
+  async applyPreset(
+    id: string,
+    facilityId: string,
+    dto: ApplyPresetDto,
+  ): Promise<ApplyPresetResultDto> {
+    const roster = await this.loadOwned(id, facilityId);
+    if (roster.status === RosterStatus.CLOSED) {
+      throw new ConflictException({
+        code: 'ROSTER_CLOSED',
+        message: '마감된 근무표는 직접 수정할 수 없습니다(결재 경유만 가능).',
+      });
+    }
+    if (roster.status === RosterStatus.CLOSING_APPROVAL) {
+      throw new ConflictException({
+        code: 'ROSTER_UNDER_APPROVAL',
+        message:
+          '마감 승인 중인 근무표는 수정할 수 없습니다(상신 취소·반려 후 편집).',
+      });
+    }
+
+    const presetId = this.parseId(dto.presetId);
+    const preset = await this.prisma.shiftPatternPreset.findUnique({
+      where: { id: presetId },
+      include: { items: true },
+    });
+    if (!preset || preset.facilityId !== roster.facilityId) {
+      throw new NotFoundException({
+        code: 'PRESET_NOT_FOUND',
+        message: '근무 패턴 프리셋을 찾을 수 없습니다.',
+      });
+    }
+    if (dto.teamNo < 1 || dto.teamNo > preset.teamCount) {
+      throw new BadRequestException({
+        code: 'INVALID_TEAM_NO',
+        message: `이 프리셋의 조 번호는 1~${preset.teamCount} 범위여야 합니다.`,
+      });
+    }
+
+    const itemsByDay = new Map<number, bigint>(
+      preset.items
+        .filter((i) => i.teamNo === dto.teamNo)
+        .map((i) => [i.dayIndex, i.shiftTypeId]),
+    );
+    const missingDays = Array.from(
+      { length: preset.cycleDays },
+      (_, i) => i + 1,
+    ).filter((d) => !itemsByDay.has(d));
+    if (missingDays.length > 0) {
+      throw new ConflictException({
+        code: 'PRESET_INCOMPLETE',
+        message: `프리셋 ${dto.teamNo}조에 정의되지 않은 일차가 있습니다: ${missingDays.join(', ')}`,
+      });
+    }
+
+    // 입력 날짜 검증(형식·달력·월범위 → 400). endDate 생략 시 근무표 월 말일까지.
+    const daysInMonth = this.daysInMonth(roster.yearMonth);
+    const startDate = this.parseWorkDate(
+      dto.startDate,
+      roster.yearMonth,
+      daysInMonth,
+    );
+    const endDate = dto.endDate
+      ? this.parseWorkDate(dto.endDate, roster.yearMonth, daysInMonth)
+      : new Date(
+          Date.UTC(
+            startDate.getUTCFullYear(),
+            startDate.getUTCMonth(),
+            daysInMonth,
+          ),
+        );
+    if (endDate.getTime() < startDate.getTime()) {
+      throw new BadRequestException({
+        code: 'INVALID_DATE_RANGE',
+        message: 'endDate는 startDate보다 앞설 수 없습니다.',
+      });
+    }
+
+    // 멀티테넌트 격리: 대상 직원이 모두 이 시설 소속인지 검증
+    const employeeIds = [...new Set(dto.employeeIds)].map((s) =>
+      this.parseId(s),
+    );
+    const owned = await this.prisma.employee.findMany({
+      where: { id: { in: employeeIds }, facilityId: roster.facilityId },
+      select: { id: true },
+    });
+    if (owned.length !== employeeIds.length) {
+      throw new BadRequestException({
+        code: 'EMPLOYEE_NOT_IN_FACILITY',
+        message: '현재 시설 소속이 아닌 직원이 포함되어 있습니다.',
+      });
+    }
+
+    const targetDates: Date[] = [];
+    for (
+      let d = new Date(startDate);
+      d.getTime() <= endDate.getTime();
+      d = this.addDays(d, 1)
+    ) {
+      targetDates.push(d);
+    }
+
+    const skipped: ApplyPresetSkipDto[] = [];
+    let appliedCount = 0;
+
+    await this.prisma.$transaction(async (tx) => {
+      // 동시성 가드: 최초 상태 확인(loadOwned)과 이 트랜잭션 시작 사이에 다른 요청이
+      // 마감 상신/마감(CLOSING_APPROVAL·CLOSED)으로 전이시켰을 수 있다. status를 WHERE 조건에
+      // 포함한 UPDATE는 DB 행 잠금 하에 원자적으로 검사되므로, 그 사이 상태가 바뀌었다면
+      // count=0으로 감지해 셀 쓰기 전에 즉시 중단한다(그렇지 않으면 이미 마감된 근무표가
+      // 프리셋으로 조용히 덮어써질 수 있다).
+      const guard = await tx.roster.updateMany({
+        where: { id: roster.id, status: roster.status },
+        data: { status: roster.status },
+      });
+      if (guard.count === 0) {
+        throw new ConflictException({
+          code: 'ROSTER_STATUS_CHANGED',
+          message:
+            '처리 중 근무표 상태가 변경되었습니다. 새로고침 후 다시 시도해 주세요.',
+        });
+      }
+
+      for (const employeeId of employeeIds) {
+        // 연속성 판정(§4.6 A-2): startDate 이전 최대 cycleDays일의 PRESET 셀을 역순으로 모은다.
+        // 하루라도 비거나 PRESET이 아니면 그 시점에서 수집을 멈춘다(연속 구간만 근거로 인정).
+        const lookbackFrom = this.addDays(startDate, -preset.cycleDays);
+        const priorEntries = await tx.scheduleEntry.findMany({
+          where: {
+            employeeId,
+            workDate: { gte: lookbackFrom, lt: startDate },
+          },
+          select: { workDate: true, shiftTypeId: true, source: true },
+          orderBy: { workDate: 'desc' },
+        });
+        const priorByDate = new Map(
+          priorEntries.map((e) => [this.toDateKey(e.workDate), e]),
+        );
+        const trailing: Array<{ shiftTypeId: bigint }> = [];
+        for (let i = 1; i <= preset.cycleDays; i++) {
+          const day = this.addDays(startDate, -i);
+          const entry = priorByDate.get(this.toDateKey(day));
+          if (!entry || entry.source !== 'PRESET') break;
+          trailing.push({ shiftTypeId: entry.shiftTypeId });
+        }
+        const startDayIndex = this.resolveStartDayIndex(
+          trailing,
+          itemsByDay,
+          preset.cycleDays,
+        );
+
+        // 대상 기간 기존 셀을 한 번에 조회해 보호 대상(APPROVAL/MANUAL) 여부를 미리 판단한다.
+        const existingEntries = await tx.scheduleEntry.findMany({
+          where: { employeeId, workDate: { gte: startDate, lte: endDate } },
+          select: { workDate: true, source: true },
+        });
+        const existingByDate = new Map(
+          existingEntries.map((e) => [this.toDateKey(e.workDate), e.source]),
+        );
+
+        for (const workDate of targetDates) {
+          const offset = this.diffDays(workDate, startDate);
+          const dayIndex =
+            this.mod(offset + startDayIndex - 1, preset.cycleDays) + 1;
+          const shiftTypeId = itemsByDay.get(dayIndex)!;
+
+          const existingSource = existingByDate.get(this.toDateKey(workDate));
+          if (existingSource === 'APPROVAL' || existingSource === 'MANUAL') {
+            skipped.push({
+              employeeId: employeeId.toString(),
+              workDate: this.toDateKey(workDate),
+              reason: 'PROTECTED_CELL',
+            });
+            continue;
+          }
+
+          const cell = {
+            rosterId: roster.id,
+            shiftTypeId,
+            source: 'PRESET' as const,
+            isProvisional: false,
+            overrideStartTime: null,
+            overrideEndTime: null,
+            sourceRequestId: null,
+            sourceLedgerId: null,
+          };
+          await tx.scheduleEntry.upsert({
+            where: { employeeId_workDate: { employeeId, workDate } },
+            update: cell,
+            create: { employeeId, workDate, ...cell },
+          });
+          appliedCount++;
+        }
+      }
+
+      if (appliedCount > 0 && roster.status === RosterStatus.COMPLETED) {
+        await tx.roster.update({
+          where: { id: roster.id },
+          data: { status: RosterStatus.DRAFT },
+        });
+      }
+    });
+
+    this.logger.log(
+      `근무표 프리셋 적용: roster ${roster.id}, preset ${preset.id}, ` +
+        `대상 ${employeeIds.length}명, 적용 ${appliedCount}건, 건너뜀 ${skipped.length}건`,
+    );
+    return { id: roster.id.toString(), appliedCount, skipped };
   }
 
   // ---------------------------------------------------------------
@@ -474,5 +693,49 @@ export class RosterStateService {
         message: '잘못된 id 형식입니다.',
       });
     }
+  }
+
+  /// 연속성 판정(§4.6 A-2): trailing[0]=startDate 바로 전날 … 역순 근거로 startDate의 dayIndex를
+  /// 역산한다. 후보 dayIndex가 정확히 하나로 좁혀질 때만 이어붙이고, 없거나 모호하면(동일 근무유형
+  /// 반복 등으로 여러 후보가 남는 경우) startDate를 1일차로 하는 새 앵커로 취급한다.
+  private resolveStartDayIndex(
+    trailing: Array<{ shiftTypeId: bigint }>,
+    itemsByDay: Map<number, bigint>,
+    cycleDays: number,
+  ): number {
+    if (trailing.length === 0) return 1;
+    const candidates: number[] = [];
+    for (let candidate = 1; candidate <= cycleDays; candidate++) {
+      let ok = true;
+      for (let i = 0; i < trailing.length; i++) {
+        const dayIndex = this.mod(candidate - 1 - i, cycleDays) + 1;
+        if (itemsByDay.get(dayIndex) !== trailing[i].shiftTypeId) {
+          ok = false;
+          break;
+        }
+      }
+      if (ok) candidates.push(candidate);
+    }
+    if (candidates.length !== 1) return 1;
+    // candidates[0] = 전날의 dayIndex → startDate는 그다음 일차
+    return this.mod(candidates[0], cycleDays) + 1;
+  }
+
+  private addDays(d: Date, days: number): Date {
+    return new Date(
+      Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + days),
+    );
+  }
+
+  private diffDays(a: Date, b: Date): number {
+    return Math.round((a.getTime() - b.getTime()) / 86_400_000);
+  }
+
+  private mod(n: number, m: number): number {
+    return ((n % m) + m) % m;
+  }
+
+  private toDateKey(d: Date): string {
+    return d.toISOString().slice(0, 10);
   }
 }
