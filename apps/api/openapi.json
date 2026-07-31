@@ -452,6 +452,30 @@
         ]
       }
     },
+    "/api/rosters/shift-types": {
+      "get": {
+        "operationId": "listShiftTypes",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RosterShiftTypeSummaryDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "rosters"
+        ]
+      }
+    },
     "/api/rosters/{id}/entries": {
       "patch": {
         "operationId": "updateEntries",
@@ -1625,6 +1649,27 @@
           "cycleDays",
           "teamCount",
           "items"
+        ]
+      },
+      "RosterShiftTypeSummaryDto": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "shift_type.code"
+          },
+          "label": {
+            "type": "string"
+          },
+          "cellLabel": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "code",
+          "label",
+          "cellLabel"
         ]
       },
       "RosterQueryDto": {

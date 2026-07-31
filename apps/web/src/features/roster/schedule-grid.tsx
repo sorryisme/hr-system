@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { RosterCellDto, RosterResponseDto } from '@/api/generated/model'
 import {
   ContextMenu,
@@ -9,7 +9,15 @@ import {
 import { JOB_ROLE_LABELS } from '@/features/approvals/labels'
 import { cn } from '@/lib/utils'
 import { ApplyPresetDialog, type PresetTarget } from './apply-preset-dialog'
+import { CellEditPopover, type CellSelection } from './cell-edit-popover'
 import { CATEGORY_CHIP_CLASS, shiftCategory, subholLabel } from './labels'
+
+interface DragRect {
+  startRow: number
+  startCol: number
+  endRow: number
+  endCol: number
+}
 
 const DOW_KR = ['일', '월', '화', '수', '목', '금', '토']
 
@@ -37,7 +45,7 @@ function pad2(n: number): string {
 export function ScheduleGrid({ roster, highlight }: Props) {
   const [year, month] = roster.yearMonth.split('-').map(Number)
   const [presetTarget, setPresetTarget] = useState<PresetTarget | null>(null)
-  // 편집 가능 상태(§4.8)에서만 프리셋 적용 허용 — CLOSED/CLOSING_APPROVAL은 결재 경유·상신 취소 후에만
+  // 편집 가능 상태(§4.8)에서만 프리셋 적용·셀 편집 허용 — CLOSED/CLOSING_APPROVAL은 결재 경유·상신 취소 후에만
   const canEdit = roster.status === 'DRAFT' || roster.status === 'COMPLETED'
 
   const days = useMemo<DayMeta[]>(() => {
@@ -48,6 +56,93 @@ export function ScheduleGrid({ roster, highlight }: Props) {
     }
     return list
   }, [roster.daysInMonth, roster.yearMonth, year, month])
+
+  // 셀 편집(§4.8): 셀 클릭 → 근무유형 팝오버, 드래그 → 사각 범위 일괄 선택.
+  // 드래그 도중 재계산되는 사각형은 ref(진행 중 값) + state(렌더용 미리보기)로 나눠 둔다.
+  const flatEmployees = useMemo(() => roster.teams.flatMap((t) => t.employees), [roster.teams])
+  const dragRef = useRef<DragRect | null>(null)
+  const dragAnchorRef = useRef<HTMLElement | null>(null)
+  const [previewRect, setPreviewRect] = useState<DragRect | null>(null)
+  const [popover, setPopover] = useState<{ anchor: HTMLElement; cells: CellSelection[] } | null>(
+    null,
+  )
+
+  useEffect(() => {
+    function handleWindowMouseUp() {
+      const rect = dragRef.current
+      dragRef.current = null
+      setPreviewRect(null)
+      if (!rect) return
+      const r0 = Math.min(rect.startRow, rect.endRow)
+      const r1 = Math.max(rect.startRow, rect.endRow)
+      const c0 = Math.min(rect.startCol, rect.endCol)
+      const c1 = Math.max(rect.startCol, rect.endCol)
+      const cells: CellSelection[] = []
+      for (let r = r0; r <= r1; r++) {
+        const emp = flatEmployees[r]
+        if (!emp) continue
+        for (let c = c0; c <= c1; c++) {
+          const d = days[c]
+          if (d) cells.push({ employeeId: emp.id, workDate: d.workDate })
+        }
+      }
+      if (cells.length > 0 && dragAnchorRef.current) {
+        const anchor = dragAnchorRef.current
+        // 팝오버를 열자마자 base-ui의 outside-press 감지가 등록되는데, 이 클릭을 마무리하는
+        // 네이티브 click 이벤트가 그 직후에(mouseup 다음) 도착해 "바깥 클릭"으로 오인되어
+        // 팝오버가 열리자마자 닫혀버린다. 현재 클릭의 이벤트 전파가 끝난 다음 틱에 열어
+        // outside-press 리스너가 이 클릭 자체를 감지하지 않도록 한다.
+        setTimeout(() => setPopover({ anchor, cells }), 0)
+      }
+    }
+    window.addEventListener('mouseup', handleWindowMouseUp)
+    return () => window.removeEventListener('mouseup', handleWindowMouseUp)
+  }, [flatEmployees, days])
+
+  const handleCellMouseDown = (row: number, col: number, el: HTMLElement) => {
+    if (!canEdit) return
+    setPopover(null)
+    const rect: DragRect = { startRow: row, startCol: col, endRow: row, endCol: col }
+    dragRef.current = rect
+    dragAnchorRef.current = el
+    setPreviewRect(rect)
+  }
+
+  const handleCellMouseEnter = (row: number, col: number, el: HTMLElement) => {
+    if (!dragRef.current) return
+    const rect: DragRect = { ...dragRef.current, endRow: row, endCol: col }
+    dragRef.current = rect
+    dragAnchorRef.current = el
+    setPreviewRect(rect)
+  }
+
+  const selectedKeys = useMemo(() => {
+    const set = new Set<string>()
+    const rect = previewRect
+    if (rect) {
+      const r0 = Math.min(rect.startRow, rect.endRow)
+      const r1 = Math.max(rect.startRow, rect.endRow)
+      const c0 = Math.min(rect.startCol, rect.endCol)
+      const c1 = Math.max(rect.startCol, rect.endCol)
+      for (let r = r0; r <= r1; r++) {
+        const emp = flatEmployees[r]
+        if (!emp) continue
+        for (let c = c0; c <= c1; c++) {
+          const d = days[c]
+          if (d) set.add(`${emp.id}|${d.workDate}`)
+        }
+      }
+    } else if (popover) {
+      for (const c of popover.cells) set.add(`${c.employeeId}|${c.workDate}`)
+    }
+    return set
+  }, [previewRect, popover, flatEmployees, days])
+
+  const rowIndexMap = useMemo(() => {
+    const m = new Map<string, number>()
+    flatEmployees.forEach((e, i) => m.set(e.id, i))
+    return m
+  }, [flatEmployees])
 
   // (직원, 날짜) → 셀
   const cellMap = useMemo(() => {
@@ -116,6 +211,10 @@ export function ScheduleGrid({ roster, highlight }: Props) {
               stickyNameClass={stickyNameClass}
               canEdit={canEdit}
               onApplyPreset={setPresetTarget}
+              rowIndexMap={rowIndexMap}
+              selectedKeys={selectedKeys}
+              onCellMouseDown={handleCellMouseDown}
+              onCellMouseEnter={handleCellMouseEnter}
             />
           ))}
         </tbody>
@@ -151,6 +250,13 @@ export function ScheduleGrid({ roster, highlight }: Props) {
         employee={presetTarget}
         onOpenChange={(open) => !open && setPresetTarget(null)}
       />
+
+      <CellEditPopover
+        rosterId={roster.id}
+        anchor={popover?.anchor ?? null}
+        cells={popover?.cells ?? []}
+        onClose={() => setPopover(null)}
+      />
     </div>
   )
 }
@@ -163,6 +269,10 @@ function TeamGroup({
   stickyNameClass,
   canEdit,
   onApplyPreset,
+  rowIndexMap,
+  selectedKeys,
+  onCellMouseDown,
+  onCellMouseEnter,
 }: {
   team: RosterResponseDto['teams'][number]
   days: DayMeta[]
@@ -171,6 +281,10 @@ function TeamGroup({
   stickyNameClass: string
   canEdit: boolean
   onApplyPreset: (target: PresetTarget) => void
+  rowIndexMap: Map<string, number>
+  selectedKeys: Set<string>
+  onCellMouseDown: (row: number, col: number, el: HTMLElement) => void
+  onCellMouseEnter: (row: number, col: number, el: HTMLElement) => void
 }) {
   return (
     <>
@@ -186,6 +300,7 @@ function TeamGroup({
       </tr>
       {team.employees.map((emp) => {
         const rowHighlighted = highlight?.employeeId === emp.id
+        const row = rowIndexMap.get(emp.id) ?? -1
         return (
           <tr key={emp.id}>
             <td
@@ -220,16 +335,30 @@ function TeamGroup({
                 </>
               )}
             </td>
-            {days.map((d) => {
+            {days.map((d, col) => {
               const cell = cellMap.get(`${emp.id}|${d.workDate}`)
               const isHighlighted = rowHighlighted && highlight?.dates.has(d.workDate)
+              const isSelected = selectedKeys.has(`${emp.id}|${d.workDate}`)
               return (
                 <td
                   key={d.day}
+                  onMouseDown={
+                    canEdit
+                      ? (e) => {
+                          e.preventDefault()
+                          onCellMouseDown(row, col, e.currentTarget)
+                        }
+                      : undefined
+                  }
+                  onMouseEnter={
+                    canEdit ? (e) => onCellMouseEnter(row, col, e.currentTarget) : undefined
+                  }
                   className={cn(
                     'h-[38px] border-b border-r border-border/50 text-center align-middle',
                     (d.dow === 0 || d.dow === 6) && 'bg-paper/50',
                     isHighlighted && 'bg-warning/15 ring-2 ring-inset ring-warning',
+                    canEdit && 'cursor-pointer select-none',
+                    isSelected && 'bg-brand/15 ring-2 ring-inset ring-brand',
                   )}
                 >
                   {cell && <CellChip cell={cell} />}

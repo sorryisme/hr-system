@@ -19,6 +19,7 @@ import {
   RosterTransitionResultDto,
 } from './dto/roster-transition.dto';
 import { ShiftPatternPresetSummaryDto } from './dto/shift-pattern-preset.dto';
+import { RosterShiftTypeSummaryDto } from './dto/shift-type-summary.dto';
 import { UpdateEntriesDto } from './dto/update-entries.dto';
 import { RosterService } from './roster.service';
 import { RosterStateService } from './roster-state.service';
@@ -53,6 +54,16 @@ export class RosterController {
     @CurrentUser() user: SessionUserDto,
   ): Promise<ShiftPatternPresetSummaryDto[]> {
     return this.rosterService.listPresets(user.facilityId);
+  }
+
+  /// 근무유형 목록(§4.7) — 셀 편집 팝오버 선택지
+  @Get('shift-types')
+  @RequirePermissions('roster:read')
+  @ApiOkResponse({ type: [RosterShiftTypeSummaryDto] })
+  listShiftTypes(
+    @CurrentUser() user: SessionUserDto,
+  ): Promise<RosterShiftTypeSummaryDto[]> {
+    return this.rosterService.listShiftTypes(user.facilityId);
   }
 
   @Post()

@@ -13,6 +13,7 @@ import {
   RosterTeamGroupDto,
 } from './dto/roster-response.dto';
 import { ShiftPatternPresetSummaryDto } from './dto/shift-pattern-preset.dto';
+import { RosterShiftTypeSummaryDto } from './dto/shift-type-summary.dto';
 
 /// 근무표 셀 조회 시 함께 읽는 관계. shiftType의 분류 필드(countsAsWork/crossesMidnight)는
 /// 하단 요약(근무 인원·요양보호사 주/야) 계산에 쓰인다.
@@ -158,6 +159,25 @@ export class RosterService {
         shiftCode: i.shiftType.code,
         cellLabel: i.shiftType.cellLabel,
       })),
+    }));
+  }
+
+  // ---------------------------------------------------------------
+  // GET /rosters/shift-types — 셀 편집 팝오버의 근무유형 선택지(§4.7/§4.8)
+  // ---------------------------------------------------------------
+  async listShiftTypes(
+    facilityId: string,
+  ): Promise<RosterShiftTypeSummaryDto[]> {
+    const facility = this.parseId(facilityId);
+    const shiftTypes = await this.prisma.shiftType.findMany({
+      where: { facilityId: facility },
+      select: { code: true, label: true, cellLabel: true },
+      orderBy: { id: 'asc' },
+    });
+    return shiftTypes.map((s) => ({
+      code: s.code,
+      label: s.label,
+      cellLabel: s.cellLabel,
     }));
   }
 
