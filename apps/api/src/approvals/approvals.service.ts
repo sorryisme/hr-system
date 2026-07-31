@@ -13,7 +13,9 @@ import { PrismaService } from '../prisma/prisma.service';
 import { DomainEventBus } from '../events/domain-event-bus';
 import {
   ApprovalReflectionPayload,
+  ApprovalRevertPayload,
   REQUEST_APPROVED,
+  REQUEST_REVERTED,
   REQUEST_STEP_APPROVED,
 } from '../events/domain-events';
 import { InboxStatusFilter } from './dto/inbox-query.dto';
@@ -67,6 +69,15 @@ type ListRow = Prisma.ApprovalRequestGetPayload<{
 type DetailRow = Prisma.ApprovalRequestGetPayload<{
   include: typeof detailInclude;
 }>;
+
+/// 근무표 원복 이벤트를 발행하는 데 필요한 최소 필드(§4.10). 반려된 건 자신 또는
+/// 취소가 확정된 원건(refRequestId 대상) 어느 쪽이든 이 모양이면 된다.
+type RevertSource = {
+  id: bigint;
+  facilityId: bigint;
+  requesterId: bigint;
+  targetDates: { targetDate: Date }[];
+};
 
 type EmployeeRow = {
   id: bigint;
@@ -215,21 +226,30 @@ export class ApprovalsService {
         },
       });
 
+      // 취소 요청(D-6/취소 승인) 자체가 최종 승인되면 원건을 CANCELED로 전환하고,
+      // 원건이 근무표에 반영해둔 셀은 트랜잭션 커밋 이후 REQUEST_REVERTED로 원복한다.
+      let cancellationRevert: RevertSource | null = null;
       if (isFinal) {
         await this.settleBalance(tx, req, 'APPROVE');
-        // 취소 요청(D-6/취소 승인) 자체가 최종 승인되면 원건을 CANCELED로 전환한다
         if (req.type === ApprovalRequestType.CANCEL && req.refRequestId) {
-          await this.applyCancellation(tx, req.refRequestId, actorId);
+          cancellationRevert = await this.applyCancellation(
+            tx,
+            req.refRequestId,
+            actorId,
+          );
         }
       }
 
       const detail = await this.readDetail(tx, requestId);
-      return { detail, req, isFinal, nextStepNo };
+      return { detail, req, isFinal, nextStepNo, cancellationRevert };
     });
 
     // 근무표 반영 이벤트는 트랜잭션 커밋 이후에 발행한다(§2.3/§4.10 — 구독자가 확정된 상태를 읽도록).
     // 최종 승인=REQUEST_APPROVED(확정 반영), 1차 승인=REQUEST_STEP_APPROVED(가반영).
     this.publishApprovalEvent(outcome.req, outcome.isFinal, outcome.nextStepNo);
+    if (outcome.cancellationRevert) {
+      this.publishRevertEvent(outcome.cancellationRevert);
+    }
     return outcome.detail;
   }
 
@@ -257,10 +277,24 @@ export class ApprovalsService {
       desiredStartTime: req.desiredStartTime,
       desiredEndTime: req.desiredEndTime,
     };
-    this.bus.publish(
+    this.bus.publish<ApprovalReflectionPayload>(
       isFinal ? REQUEST_APPROVED : REQUEST_STEP_APPROVED,
       payload,
     );
+  }
+
+  /// 반려되거나(자기 자신) 취소가 확정된(원건) 요청이 근무표에 반영해둔 셀을 원복하도록 발행한다.
+  /// 애초에 반영된 셀이 없었다면(예: 1차 승인 전 반려) 구독자에서 조용히 무시된다.
+  private publishRevertEvent(req: RevertSource): void {
+    const payload: ApprovalRevertPayload = {
+      requestId: req.id,
+      facilityId: req.facilityId,
+      requesterId: req.requesterId,
+      targetDates: req.targetDates.map((d) =>
+        d.targetDate.toISOString().slice(0, 10),
+      ),
+    };
+    this.bus.publish<ApprovalRevertPayload>(REQUEST_REVERTED, payload);
   }
 
   async rejectRequest(
@@ -277,7 +311,7 @@ export class ApprovalsService {
       });
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const outcome = await this.prisma.$transaction(async (tx) => {
       const req = await this.loadForTransition(tx, requestId);
       const { nextStepNo } = this.resolveCurrentStep(req, actorId);
 
@@ -309,8 +343,14 @@ export class ApprovalsService {
       // 반려 시 reserved 해제(§3.4 전이 규칙표) — used는 건드리지 않음
       await this.settleBalance(tx, req, 'REJECT');
 
-      return this.readDetail(tx, requestId);
+      const detail = await this.readDetail(tx, requestId);
+      return { detail, req };
     });
+
+    // 1차 승인으로 가반영된 셀이 있었다면 트랜잭션 커밋 이후 원복한다(§4.10).
+    // 가반영이 없었던 경우(1차 승인 전 반려 등)는 구독자에서 조용히 무시된다.
+    this.publishRevertEvent(outcome.req);
+    return outcome.detail;
   }
 
   // ---------------------------------------------------------------
@@ -356,13 +396,13 @@ export class ApprovalsService {
     tx: Prisma.TransactionClient,
     refRequestId: bigint,
     actorId: bigint,
-  ): Promise<void> {
+  ): Promise<RevertSource | null> {
     const original = await tx.approvalRequest.findUnique({
       where: { id: refRequestId },
       include: { targetDates: true },
     });
     if (!original || !OPEN_STATUSES.includes(original.status)) {
-      return;
+      return null;
     }
 
     await tx.approvalRequest.update({
@@ -374,23 +414,31 @@ export class ApprovalsService {
       data: { requestId: refRequestId, actorId, action: 'CANCEL' },
     });
 
-    if (original.leaveDays === null) return;
-    const firstDate = original.targetDates[0]?.targetDate ?? original.createdAt;
-    const balanceYear = firstDate.getUTCFullYear();
-    const where = {
-      employeeId_balanceYear: { employeeId: original.requesterId, balanceYear },
-    };
-    if (original.type === ApprovalRequestType.SUBSTITUTE_HOLIDAY) {
-      await tx.substituteHolidayBalance.update({
-        where,
-        data: { reserved: { decrement: original.leaveDays } },
-      });
-    } else {
-      await tx.leaveBalance.update({
-        where,
-        data: { reserved: { decrement: original.leaveDays } },
-      });
+    if (original.leaveDays !== null) {
+      const firstDate =
+        original.targetDates[0]?.targetDate ?? original.createdAt;
+      const balanceYear = firstDate.getUTCFullYear();
+      const where = {
+        employeeId_balanceYear: {
+          employeeId: original.requesterId,
+          balanceYear,
+        },
+      };
+      if (original.type === ApprovalRequestType.SUBSTITUTE_HOLIDAY) {
+        await tx.substituteHolidayBalance.update({
+          where,
+          data: { reserved: { decrement: original.leaveDays } },
+        });
+      } else {
+        await tx.leaveBalance.update({
+          where,
+          data: { reserved: { decrement: original.leaveDays } },
+        });
+      }
     }
+
+    // 원건이 근무표에 반영해둔 셀(있다면)을 원복하도록, 트랜잭션 커밋 이후 발행할 정보를 돌려준다.
+    return original;
   }
 
   /// CANCEL 유형은 stepNo=1에 시설 결재선 전원이 후보로 스냅샷돼 있다(결재라인 1개 제한,
