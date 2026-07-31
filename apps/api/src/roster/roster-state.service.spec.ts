@@ -13,7 +13,7 @@ type ScheduleEntryRow = {
 };
 
 type PrismaMock = {
-  roster: { findUnique: jest.Mock; update: jest.Mock };
+  roster: { findUnique: jest.Mock; update: jest.Mock; updateMany: jest.Mock };
   shiftPatternPreset: { findUnique: jest.Mock };
   employee: { findMany: jest.Mock };
   scheduleEntry: { findMany: jest.Mock; upsert: jest.Mock };
@@ -68,6 +68,7 @@ describe('RosterStateService.applyPreset', () => {
       roster: {
         findUnique: jest.fn().mockResolvedValue(rosterRow),
         update: jest.fn().mockResolvedValue({}),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       shiftPatternPreset: {
         findUnique: jest.fn().mockResolvedValue(presetRow),
@@ -202,6 +203,22 @@ describe('RosterStateService.applyPreset', () => {
       where: { id: 100n },
       data: { status: 'DRAFT' },
     });
+  });
+
+  it('트랜잭션 시작 직전 다른 요청이 상태를 바꾸면(동시성 가드) 셀을 쓰지 않고 중단한다', async () => {
+    // loadOwned 시점엔 DRAFT였으나, 트랜잭션 진입 시점엔 이미 다른 요청이 마감 등으로
+    // 전이시켜 status WHERE 조건이 더 이상 매치되지 않는 상황(guard.count=0)을 시뮬레이션.
+    prisma.roster.updateMany.mockResolvedValue({ count: 0 });
+
+    await expect(
+      service.applyPreset(
+        '100',
+        facilityId,
+        baseDto({ endDate: '2026-08-06' }),
+      ),
+    ).rejects.toThrow(ConflictException);
+
+    expect(prisma.scheduleEntry.upsert).not.toHaveBeenCalled();
   });
 
   it('CLOSED 근무표는 적용을 거부한다', async () => {
