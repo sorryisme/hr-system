@@ -1,3 +1,5 @@
+import { generateUuid } from '@/lib/uuid'
+
 const DEVICE_UID_KEY = 'care-mobile-device-uid'
 
 /**
@@ -11,7 +13,7 @@ export function getOrCreateDeviceUid(): string {
   if (existing) {
     return existing
   }
-  const uid = crypto.randomUUID()
+  const uid = generateUuid()
   localStorage.setItem(DEVICE_UID_KEY, uid)
   return uid
 }
