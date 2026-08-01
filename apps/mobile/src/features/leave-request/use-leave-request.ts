@@ -7,6 +7,7 @@ import {
   useSubmitRequest,
 } from '@/api/generated/endpoints'
 import { ApiError } from '@/api/mutator'
+import { generateUuid } from '@/lib/uuid'
 import { toIsoDate } from './domain'
 import type { LeaveRequestType, Screen } from './types'
 
@@ -106,7 +107,7 @@ export function useLeaveRequest() {
 
     try {
       await submitMutation.mutateAsync({
-        data: { type, targetDates, idempotencyKey: crypto.randomUUID() },
+        data: { type, targetDates, idempotencyKey: generateUuid() },
       })
       if (navigator.vibrate) navigator.vibrate([30, 40, 30])
       await invalidateLeaveQueries()

@@ -6,8 +6,12 @@
     "node": ">=22"
   },
   "scripts": {
+    "dev": "concurrently -n api,web,mobile -c blue,green,magenta \"pnpm:dev:api\" \"pnpm:dev:web\" \"pnpm:dev:mobile\"",
     "dev:api": "pnpm --filter api start:dev",
     "dev:web": "pnpm --filter web dev",
     "dev:mobile": "pnpm --filter mobile dev"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.4"
   }
 }
