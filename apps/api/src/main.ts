@@ -18,9 +18,18 @@ async function bootstrap() {
   applyGlobalPrefix(app);
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   // 로컬 Vite dev 서버 전용(5173=apps/web, 5174=apps/mobile). 운영 origin은 배포 구성 확정 시 별도 반영한다.
+  // LAN IP 등 환경별 추가 origin은 CORS_ORIGINS(.env, 콤마 구분)로 확장한다 — 코드에 개인 IP 하드코딩 금지.
   // credentials: 인증 쿠키(cs_access_token)가 실리도록 허용
+  const extraOrigins = (process.env.CORS_ORIGINS ?? '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
   app.enableCors({
-    origin: ['http://localhost:5173', 'http://localhost:5174'],
+    origin: [
+      'http://localhost:5173',
+      'http://localhost:5174',
+      ...extraOrigins,
+    ],
     credentials: true,
   });
 
