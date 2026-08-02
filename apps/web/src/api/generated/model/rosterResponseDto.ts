@@ -8,6 +8,7 @@ import type { RosterCellDto } from './rosterCellDto';
 import type { RosterDaySummaryDto } from './rosterDaySummaryDto';
 import type { RosterStatus } from './rosterStatus';
 import type { RosterTeamGroupDto } from './rosterTeamGroupDto';
+import type { RosterValidationDto } from './rosterValidationDto';
 
 export interface RosterResponseDto {
   id: string;
@@ -18,4 +19,5 @@ export interface RosterResponseDto {
   teams: RosterTeamGroupDto[];
   cells: RosterCellDto[];
   summary: RosterDaySummaryDto[];
+  validation: RosterValidationDto;
 }

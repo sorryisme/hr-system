@@ -1718,6 +1718,121 @@
           "nightShortage"
         ]
       },
+      "MonthlyStaffingItemDto": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "type": "string",
+            "enum": [
+              "DIRECTOR",
+              "OFFICE_MANAGER",
+              "SOCIAL_WORKER",
+              "NURSE_OR_AIDE",
+              "THERAPIST",
+              "CAREGIVER",
+              "CLERK",
+              "DIETITIAN",
+              "COOK",
+              "HYGIENIST",
+              "JANITOR"
+            ]
+          },
+          "required": {
+            "type": "number"
+          },
+          "actual": {
+            "type": "number"
+          },
+          "met": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "category",
+          "required",
+          "actual",
+          "met"
+        ]
+      },
+      "BonusScoreBreakdownDto": {
+        "type": "object",
+        "properties": {
+          "staffAddon": {
+            "type": "number"
+          },
+          "nightAddon": {
+            "type": "number"
+          },
+          "nurseAddon": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "staffAddon",
+          "nightAddon",
+          "nurseAddon"
+        ]
+      },
+      "BonusScoreDto": {
+        "type": "object",
+        "properties": {
+          "estimated": {
+            "type": "number",
+            "description": "①+②+③ 합계"
+          },
+          "target": {
+            "type": "number",
+            "nullable": true,
+            "description": "Facility.addonTargetScore(A-6) — 미설정 시 null"
+          },
+          "breakdown": {
+            "$ref": "#/components/schemas/BonusScoreBreakdownDto"
+          },
+          "isPlanBased": {
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "required": [
+          "estimated",
+          "target",
+          "breakdown",
+          "isPlanBased"
+        ]
+      },
+      "RosterValidationDto": {
+        "type": "object",
+        "properties": {
+          "monthlyBaseHours": {
+            "type": "number",
+            "nullable": true
+          },
+          "monthlyStaffing": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MonthlyStaffingItemDto"
+            }
+          },
+          "bonusScore": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/BonusScoreDto"
+              }
+            ]
+          },
+          "configMissing": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "monthlyBaseHours",
+          "monthlyStaffing",
+          "bonusScore",
+          "configMissing"
+        ]
+      },
       "RosterResponseDto": {
         "type": "object",
         "properties": {
@@ -1755,6 +1870,9 @@
             "items": {
               "$ref": "#/components/schemas/RosterDaySummaryDto"
             }
+          },
+          "validation": {
+            "$ref": "#/components/schemas/RosterValidationDto"
           }
         },
         "required": [
@@ -1764,7 +1882,8 @@
           "daysInMonth",
           "teams",
           "cells",
-          "summary"
+          "summary",
+          "validation"
         ]
       },
       "ShiftPatternItemDto": {
