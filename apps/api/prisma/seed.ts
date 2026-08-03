@@ -40,6 +40,8 @@ async function main() {
     gpsRadiusM: 100,
     tagMarginMinutes: 30,
     adminCallPhone: '031-283-3211',
+    // 가산 목표 점수(A-6) — 실시간 검증 패널(§4.9)의 "예상 점수 vs 목표 점수" 비교 대상
+    addonTargetScore: '15.0',
   };
   const facility = await prisma.facility.upsert({
     where: { id: 1n },
@@ -464,6 +466,24 @@ async function seedRosterFixtures(facilityId: bigint) {
   const MONTH = 7; // 7월
   const yearMonth = `${YEAR}-${String(MONTH).padStart(2, '0')}`;
   const daysInMonth = new Date(Date.UTC(YEAR, MONTH, 0)).getUTCDate(); // 31
+
+  // --- 고시 파라미터(§4.2~4.4, A-6). 스키마 기본값이 원문 수치와 동일해 override 없이 둔다 ---
+  // 아래 재시드 가드보다 앞에 둔다 — schedule_entry가 이미 있어도 검증 패널 입력값은 항상 보장한다.
+  const paramsExist = await prisma.regulationParamSet.findFirst({
+    where: { effectiveFrom: new Date('2026-01-01T00:00:00Z') },
+  });
+  if (!paramsExist) {
+    await prisma.regulationParamSet.create({
+      data: { effectiveFrom: new Date('2026-01-01T00:00:00Z'), effectiveTo: null },
+    });
+  }
+
+  // --- 월별 현원(§4.2 입력값, A-6) — 실시간 검증 패널 시연용 ---
+  await prisma.monthlyCensus.upsert({
+    where: { facilityId_yearMonth: { facilityId, yearMonth } },
+    update: {},
+    create: { facilityId, yearMonth, residentCount: 55, serviceDays: daysInMonth },
+  });
 
   // 재시드 가드: 이미 셀이 있으면 통째로 건너뛴다(로컬 완전 재시드는 migrate reset — 운영 금지)
   if ((await prisma.scheduleEntry.count()) > 0) {

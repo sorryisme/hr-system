@@ -27,7 +27,10 @@ import type {
   ApplyPresetDto,
   ApplyPresetResultDto,
   ApproveRequestDto,
+  AttendanceTodayResponseDto,
   CancelLeaveRequestResponseDto,
+  ClockTagRequestDto,
+  ClockTagResponseDto,
   CloseRosterDto,
   CreateLeaveRequestDto,
   CreateRoster200,
@@ -813,6 +816,267 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getRejectRequestMutationOptions(options), queryClient);
+    }
+
+export type getTodayResponse200 = {
+  data: AttendanceTodayResponseDto
+  status: 200
+}
+
+export type getTodayResponseSuccess = (getTodayResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getTodayResponse = (getTodayResponseSuccess)
+
+export const getGetTodayUrl = () => {
+
+
+
+
+  return `/api/attendance/today`
+}
+
+export const getToday = async ( options?: RequestInit): Promise<getTodayResponse> => {
+
+  return customFetch<getTodayResponse>(getGetTodayUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetTodayQueryKey = () => {
+    return [
+    `/api/attendance/today`
+    ] as const;
+    }
+
+
+export const getGetTodayQueryOptions = <TData = Awaited<ReturnType<typeof getToday>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getToday>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetTodayQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getToday>>> = ({ signal }) => getToday({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getToday>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetTodayQueryResult = NonNullable<Awaited<ReturnType<typeof getToday>>>
+export type GetTodayQueryError = unknown
+
+
+export function useGetToday<TData = Awaited<ReturnType<typeof getToday>>, TError = unknown>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getToday>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getToday>>,
+          TError,
+          Awaited<ReturnType<typeof getToday>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetToday<TData = Awaited<ReturnType<typeof getToday>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getToday>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getToday>>,
+          TError,
+          Awaited<ReturnType<typeof getToday>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetToday<TData = Awaited<ReturnType<typeof getToday>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getToday>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetToday<TData = Awaited<ReturnType<typeof getToday>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getToday>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetTodayQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export type clockInResponse200 = {
+  data: ClockTagResponseDto
+  status: 200
+}
+
+export type clockInResponseSuccess = (clockInResponse200) & {
+  headers: Headers;
+};
+;
+
+export type clockInResponse = (clockInResponseSuccess)
+
+export const getClockInUrl = () => {
+
+
+
+
+  return `/api/attendance/clock-in`
+}
+
+export const clockIn = async (clockTagRequestDto: ClockTagRequestDto, options?: RequestInit): Promise<clockInResponse> => {
+
+  return customFetch<clockInResponse>(getClockInUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(clockTagRequestDto)
+  }
+);}
+
+
+
+
+
+export const getClockInMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof clockIn>>, TError,{data: ClockTagRequestDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof clockIn>>, TError,{data: ClockTagRequestDto}, TContext> => {
+
+const mutationKey = ['clockIn'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof clockIn>>, {data: ClockTagRequestDto}> = (props) => {
+          const {data} = props ?? {};
+
+          return  clockIn(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ClockInMutationResult = NonNullable<Awaited<ReturnType<typeof clockIn>>>
+    export type ClockInMutationBody = ClockTagRequestDto
+    export type ClockInMutationError = unknown
+
+    export const useClockIn = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof clockIn>>, TError,{data: ClockTagRequestDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof clockIn>>,
+        TError,
+        {data: ClockTagRequestDto},
+        TContext
+      > => {
+      return useMutation(getClockInMutationOptions(options), queryClient);
+    }
+
+export type clockOutResponse200 = {
+  data: ClockTagResponseDto
+  status: 200
+}
+
+export type clockOutResponseSuccess = (clockOutResponse200) & {
+  headers: Headers;
+};
+;
+
+export type clockOutResponse = (clockOutResponseSuccess)
+
+export const getClockOutUrl = () => {
+
+
+
+
+  return `/api/attendance/clock-out`
+}
+
+export const clockOut = async (clockTagRequestDto: ClockTagRequestDto, options?: RequestInit): Promise<clockOutResponse> => {
+
+  return customFetch<clockOutResponse>(getClockOutUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(clockTagRequestDto)
+  }
+);}
+
+
+
+
+
+export const getClockOutMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof clockOut>>, TError,{data: ClockTagRequestDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof clockOut>>, TError,{data: ClockTagRequestDto}, TContext> => {
+
+const mutationKey = ['clockOut'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof clockOut>>, {data: ClockTagRequestDto}> = (props) => {
+          const {data} = props ?? {};
+
+          return  clockOut(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ClockOutMutationResult = NonNullable<Awaited<ReturnType<typeof clockOut>>>
+    export type ClockOutMutationBody = ClockTagRequestDto
+    export type ClockOutMutationError = unknown
+
+    export const useClockOut = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof clockOut>>, TError,{data: ClockTagRequestDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof clockOut>>,
+        TError,
+        {data: ClockTagRequestDto},
+        TContext
+      > => {
+      return useMutation(getClockOutMutationOptions(options), queryClient);
     }
 
 export type registerResponse200 = {

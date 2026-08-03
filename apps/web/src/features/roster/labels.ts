@@ -1,4 +1,4 @@
-import type { RosterStatus } from '@/api/generated/model'
+import type { MonthlyStaffingItemDtoCategory, RosterStatus } from '@/api/generated/model'
 
 // 근무표 셀 표기·색 매핑. 표시 문자(cellLabel)는 백엔드가 이미 계산해 내려주므로
 // 프론트는 shiftCode → 색 카테고리(index.css의 shift-* 토큰)만 정한다.
@@ -79,6 +79,21 @@ export const CODE_GUIDE_ROWS: { kind: string; detail: string; format: string }[]
   { kind: '병가', detail: '유급병가', format: '병' },
   { kind: '결근', detail: '결근', format: '결' },
 ]
+
+// §4.2 인력배치기준 표의 11개 직군행 라벨(간호(조무)사·물리(작업)치료사는 합산 표기 — 원문 그대로)
+export const STAFFING_CATEGORY_LABELS: Record<MonthlyStaffingItemDtoCategory, string> = {
+  DIRECTOR: '시설장',
+  OFFICE_MANAGER: '사무국장',
+  SOCIAL_WORKER: '사회복지사',
+  NURSE_OR_AIDE: '간호(조무)사',
+  THERAPIST: '물리(작업)치료사',
+  CAREGIVER: '요양보호사',
+  CLERK: '사무원',
+  DIETITIAN: '영양사',
+  COOK: '조리원',
+  HYGIENIST: '위생원',
+  JANITOR: '관리인',
+}
 
 export const ROSTER_STATUS_LABELS: Record<RosterStatus, string> = {
   DRAFT: '작성 중',

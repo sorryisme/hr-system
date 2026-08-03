@@ -14,6 +14,7 @@ import {
 } from './dto/roster-response.dto';
 import { ShiftPatternPresetSummaryDto } from './dto/shift-pattern-preset.dto';
 import { RosterShiftTypeSummaryDto } from './dto/shift-type-summary.dto';
+import { RosterValidationService } from './roster-validation.service';
 
 /// 근무표 셀 조회 시 함께 읽는 관계. shiftType의 분류 필드(countsAsWork/crossesMidnight)는
 /// 하단 요약(근무 인원·요양보호사 주/야) 계산에 쓰인다.
@@ -38,7 +39,10 @@ type EntryRow = Prisma.ScheduleEntryGetPayload<{
 
 @Injectable()
 export class RosterService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly rosterValidationService: RosterValidationService,
+  ) {}
 
   // ---------------------------------------------------------------
   // GET /rosters — 목업(근무표 승인) 렌더용 단일 조회
@@ -59,7 +63,7 @@ export class RosterService {
       });
     }
 
-    const [employees, entries, staffingRules] = await Promise.all([
+    const [employees, entries, staffingRules, validation] = await Promise.all([
       // 세로축: 재직 직원(팀 정렬 → 이름). 종사자 본인 팀 제한은 관리자 조회라 미적용(앱 레벨)
       this.prisma.employee.findMany({
         where: { facilityId: facility, status: 'ACTIVE' },
@@ -80,6 +84,8 @@ export class RosterService {
       this.prisma.dailyStaffingRule.findMany({
         where: { facilityId: facility, teamId: null },
       }),
+      // 실시간 검증 패널(§4.2/§4.3) — RosterValidationService
+      this.rosterValidationService.compute(facility, roster.id, yearMonth),
     ]);
 
     const daysInMonth = this.daysInMonth(yearMonth);
@@ -97,6 +103,7 @@ export class RosterService {
         daysInMonth,
         staffingRules,
       ),
+      validation,
     };
   }
 

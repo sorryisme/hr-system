@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { CodeGuideDialog } from './code-guide-dialog'
 import { CATEGORY_CHIP_CLASS, LEGEND_ITEMS } from './labels'
-import { RosterApprovalSidebar } from './roster-approval-sidebar'
+import { RosterSidePanel } from './roster-side-panel'
 import { RosterToolbar } from './roster-toolbar'
 import { ScheduleGrid, type CellHighlight } from './schedule-grid'
 
@@ -138,8 +138,10 @@ export function RosterPage() {
           ) : null}
         </main>
 
-        {/* 사이드: 결재함 */}
-        <RosterApprovalSidebar
+        {/* 사이드: 검증·결재함. 결재함 탭은 근무표 유무와 무관하게 항상 동작해야 하므로
+            로딩·미생성 상태에서도 패널 자체는 유지한다(검증 탭만 roster 데이터에 의존). */}
+        <RosterSidePanel
+          roster={roster}
           yearMonth={yearMonth}
           selectedId={selected?.id ?? null}
           onSelect={setSelected}

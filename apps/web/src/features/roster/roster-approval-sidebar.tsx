@@ -36,8 +36,9 @@ interface Props {
 const REFLECTION_SETTLE_MS = 600
 
 /**
- * 근무표 우측 결재함(목업 사이드바). 대기 신청을 승인하면 결재 이벤트(request.approved)로
- * 근무표 셀이 갱신되므로, 처리 후 목록·근무표 쿼리를 함께 무효화한다.
+ * 근무표 우측 패널의 "결재함" 탭 콘텐츠(aside 셸은 RosterSidePanel이 소유). 대기 신청을
+ * 승인하면 결재 이벤트(request.approved)로 근무표 셀이 갱신되므로, 처리 후 목록·근무표
+ * 쿼리를 함께 무효화한다.
  * 현재 보고 있는 달(yearMonth)의 대상일을 가진 결재만 노출한다 — 타 월 결재를
  * "위 근무표에 반영"한다고 오인시키지 않기 위함.
  * 결재선 단계별 권한 검증은 서버가 수행하며 상세 화면은 /approvals 에 있다.
@@ -86,7 +87,7 @@ export function RosterApprovalSidebar({ yearMonth, selectedId, onSelect }: Props
   const user = getSessionUser()
 
   return (
-    <aside className="flex w-[360px] shrink-0 flex-col overflow-hidden border-l border-border bg-paper">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <div className="shrink-0 px-5 pt-5">
         <div className="flex items-baseline gap-2">
           <h2 className="font-heading text-lg font-bold">결재함</h2>
@@ -235,6 +236,6 @@ export function RosterApprovalSidebar({ yearMonth, selectedId, onSelect }: Props
           })
         )}
       </div>
-    </aside>
+    </div>
   )
 }

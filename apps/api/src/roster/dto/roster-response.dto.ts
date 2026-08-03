@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { JobRole, RosterStatus, ScheduleEntrySource } from '@prisma/client';
+import { RosterValidationDto } from './roster-validation.dto';
 
 /// 근무표 셀 1개(직원 × 일자). 시각·표기의 원천 규칙은 아래 필드 주석 참고.
 export class RosterCellDto {
@@ -112,4 +113,8 @@ export class RosterResponseDto {
 
   @ApiProperty({ type: [RosterDaySummaryDto] })
   summary!: RosterDaySummaryDto[];
+
+  /// 실시간 검증 패널(§4.8) — 월별 인력산정·가산 예상 점수(§4.2/§4.3)
+  @ApiProperty({ type: RosterValidationDto })
+  validation!: RosterValidationDto;
 }
