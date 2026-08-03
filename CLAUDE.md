@@ -11,36 +11,45 @@ care/
 │  │  └─ src/
 │  │     ├─ main.ts             # bootstrap, Swagger(/api/docs, /api/docs/json)
 │  │     ├─ app.module.ts / app.controller.ts / app.service.ts
-│  │     └─ app.controller.spec.ts
-│  │     # 도메인 모듈·DB 계층(Prisma)·인증(JWT/RBAC) 미구현 — 기본 스캐폴드만 존재
+│  │     ├─ prisma/             # PrismaModule/PrismaService — DB 접근 공통 계층
+│  │     ├─ auth/               # 로그인, JWT 발급·검증, @RequirePermissions 가드(RBAC)
+│  │     ├─ devices/            # 모바일 기기 등록·인증
+│  │     ├─ events/             # 도메인 이벤트 버스 (결재 승인 → 근무표 반영 등 모듈 간 연동)
+│  │     ├─ leave/              # 휴가 신청·잔여일수
+│  │     ├─ approvals/          # 결재함(승인/반려/취소), 결재선, 이력
+│  │     ├─ roster/             # 근무표 조회·편집·마감 상태머신, 프리셋 적용, 실시간 검증(§4.8)
+│  │     └─ attendance/         # GPS 원터치 출퇴근 태그
+│  │     # 도메인 모듈·DB 계층(Prisma)·인증(JWT/RBAC) 구현되어 있음. 신규 도메인 추가 시 위 모듈 구조를 따른다.
 │  ├─ web/                     # Vite 8 + React 19 — 관리자 웹(데스크톱)
 │  │  └─ src/
-│  │     ├─ routes/             # TanStack Router 파일기반 라우팅 (__root.tsx, index.tsx)
+│  │     ├─ routes/             # TanStack Router 파일기반 라우팅 (login, dashboard, approvals, roster 등)
 │  │     ├─ routeTree.gen.ts    # 자동 생성물 — 수정 금지
+│  │     ├─ api/generated/      # Orval 생성물(OpenAPI → 타입·클라이언트) — 수정 금지, `pnpm --filter web orval`로 재생성
 │  │     ├─ components/
-│  │     │  ├─ ui/              # shadcn 프리미티브 (button, input, label, table, dialog, dropdown-menu)
-│  │     │  └─ shared/          # 공통 컴포넌트 — 현재 디렉터리만 존재(.gitkeep), 구현 없음
-│  │     ├─ features/           # 도메인별 컴포넌트 — 현재 디렉터리만 존재(.gitkeep), 구현 없음
+│  │     │  ├─ ui/              # shadcn 프리미티브 (button, input, label, table, dialog, dropdown-menu, select, tabs 등)
+│  │     │  └─ shared/          # app-shell.tsx(공통 레이아웃) 등 구현되어 있음
+│  │     ├─ features/           # 도메인별 컴포넌트 — auth, dashboard, approvals, roster 구현되어 있음
 │  │     └─ lib/utils.ts        # shadcn cn() 헬퍼
-│  └─ mobile/                  # Vite 8 + React 19 — 종사자 모바일 웹뷰(휴가 신청, 시니어 친화 UI)
-│     └─ src/                   # apps/web과 동일 스택·컨벤션. 스캐폴드만 존재, 기능 미구현
-│        ├─ routes/             # TanStack Router 파일기반 라우팅 (__root.tsx, index.tsx)
+│  └─ mobile/                  # Vite 8 + React 19 — 종사자 모바일 웹뷰(시니어 친화 UI)
+│     └─ src/                   # apps/web과 동일 스택·컨벤션
+│        ├─ routes/             # TanStack Router 파일기반 라우팅 (login, index, leave 등)
 │        ├─ routeTree.gen.ts    # 자동 생성물 — 수정 금지
+│        ├─ api/generated/      # Orval 생성물 — 수정 금지, `pnpm --filter mobile orval`로 재생성
 │        ├─ components/
-│        │  ├─ ui/              # shadcn 프리미티브 — 아직 없음(.gitkeep), 필요 시 shadcn CLI로 추가
-│        │  └─ shared/          # mobile-shell.tsx(루트 레이아웃)만 존재
-│        ├─ features/           # 도메인별 컴포넌트 — 현재 디렉터리만 존재(.gitkeep), 구현 없음
+│        │  ├─ ui/              # shadcn 프리미티브 (button, card, badge, alert, input, separator)
+│        │  └─ shared/          # mobile-shell.tsx(루트 레이아웃), bottom-nav.tsx 구현되어 있음
+│        ├─ features/           # device-auth(기기 인증), leave-request(휴가 신청), attendance(GPS 출퇴근) 구현되어 있음
 │        └─ lib/utils.ts        # shadcn cn() 헬퍼
 └─ docs/
    ├─ architecture/architecture-v3-final.md   # 확정 아키텍처
    ├─ plan/                                    # 기능요구사항·개발계획 (근태/근무표/가산점수 등 도메인 규칙)
-   ├─ ddl/carehome_tms_ddl_v1.1.sql             # MySQL DDL (Prisma 미도입, 스키마만 존재)
-   ├─ mock-ui/                                  # 결재 등 화면 목업
+   ├─ ddl/carehome_tms_ddl_v1.3.sql             # MySQL DDL (참고용 — 실제 스키마는 apps/api/prisma/schema.prisma가 원본)
+   ├─ mock-ui/                                  # 결재·대시보드·근무표·휴가신청 등 화면 목업
    └─ logs/{년월일}/{yyyy-MM-dd}-{작업제목}.md   # 코드 작업 산출물 (General 규칙에 따라 생성)
 ```
 
-- Orval 연동(OpenAPI → 프론트 타입)은 각 프론트(apps/web, apps/mobile)에 실제 API 클라이언트가 필요해지는 시점에 구성한다. 그 전까지는 백엔드를 호출하지 않는다.
-- `apps/web/src/components/shared`, `apps/web/src/features`에 실제 구현(DataTable/FormField/PageLayout/ConfirmDialog 등)을 추가할 때는 이 구조를 유지한다.
+- Orval 연동은 apps/web, apps/mobile 각각 `orval.config.ts`로 구성되어 있으며 api/generated 하위에 타입·클라이언트가 이미 생성되어 있다. 백엔드 API 추가·변경 시 Swagger(OpenAPI) 갱신 후 Orval을 재생성한다.
+- 신규 기능은 각 앱의 features/ 아래 기존 도메인(auth, dashboard, approvals, roster / device-auth, leave-request, attendance)과 동일한 파일 구성(컴포넌트, domain.ts, use-*.ts 훅)을 따른다.
 
 ## Architecture
 - NestJS(apps/api) 작업 시 `.claude/skills/nestjs-best-practices` 참고.
