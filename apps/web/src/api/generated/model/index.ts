@@ -39,7 +39,6 @@ export * from './monthlyStaffingItemDto';
 export * from './monthlyStaffingItemDtoCategory';
 export * from './myLeaveRequestDto';
 export * from './registerDeviceDto';
-export * from './rejectCloseDto';
 export * from './rejectRequestDto';
 export * from './requestDetailDto';
 export * from './requestLineDto';

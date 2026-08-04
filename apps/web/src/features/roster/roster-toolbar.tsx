@@ -1,12 +1,6 @@
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import {
-  getGetRosterQueryKey,
-  useClose,
-  useComplete,
-  useRejectClose,
-  useSubmitClose,
-} from '@/api/generated/endpoints'
+import { getGetRosterQueryKey, useClose, useReopen } from '@/api/generated/endpoints'
 import type { RosterResponseDto, ValidationFindingDto } from '@/api/generated/model'
 import { ApiError } from '@/api/mutator'
 import { Badge } from '@/components/ui/badge'
@@ -20,6 +14,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
+import { getSessionUser } from '@/features/auth/session'
 import { cn } from '@/lib/utils'
 import { findingText, ROSTER_STATUS_LABELS } from './labels'
 
@@ -30,20 +25,25 @@ function errorMessage(error: unknown): string {
 
 const STATUS_BADGE: Record<RosterResponseDto['status'], string> = {
   DRAFT: 'bg-muted text-muted-foreground',
-  COMPLETED: 'bg-brand/10 text-brand',
-  CLOSING_APPROVAL: 'bg-warning/15 text-warning',
   CLOSED: 'bg-approve/10 text-approve',
 }
 
-/** 근무표 상태 배지 + 상태머신 전이 액션(§4.8): 작성완료 · 마감상신 · 마감승인/반려 */
+/// 마감/마감취소(§4.8, §1.3)는 시설장·사무국장만 — 백엔드도 동일 검사를 하므로(403), 여기서는
+/// 버튼 노출 여부만 결정한다(실제 권한 판단의 단일 소스는 서버).
+function canCloseRoster(): boolean {
+  const jobRole = getSessionUser()?.jobRole
+  return jobRole === 'DIRECTOR' || jobRole === 'OFFICE_MANAGER'
+}
+
+/** 근무표 상태 배지 + 상태머신 전이 액션(§4.8): 마감 · 마감취소(시설장·사무국장 전용) */
 export function RosterToolbar({ roster }: { roster: RosterResponseDto }) {
   const queryClient = useQueryClient()
   const [error, setError] = useState<string | null>(null)
   const [violations, setViolations] = useState<ValidationFindingDto[]>([])
   const [forceOpen, setForceOpen] = useState(false)
   const [forceReason, setForceReason] = useState('')
-  const [rejectOpen, setRejectOpen] = useState(false)
-  const [rejectReason, setRejectReason] = useState('')
+
+  const canClose = canCloseRoster()
 
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: getGetRosterQueryKey() })
@@ -58,18 +58,6 @@ export function RosterToolbar({ roster }: { roster: RosterResponseDto }) {
     await invalidate()
   }
 
-  const completeMut = useComplete({ mutation: { onSuccess: (r) => onSuccess(r.data), onError } })
-  const submitMut = useSubmitClose({ mutation: { onSuccess: (r) => onSuccess(r.data), onError } })
-  const rejectMut = useRejectClose({
-    mutation: {
-      onSuccess: async (r) => {
-        setRejectOpen(false)
-        setRejectReason('')
-        await onSuccess(r.data)
-      },
-      onError,
-    },
-  })
   const closeMut = useClose({
     mutation: {
       onSuccess: async (r) => {
@@ -87,9 +75,9 @@ export function RosterToolbar({ roster }: { roster: RosterResponseDto }) {
       },
     },
   })
+  const reopenMut = useReopen({ mutation: { onSuccess: (r) => onSuccess(r.data), onError } })
 
-  const pending =
-    completeMut.isPending || submitMut.isPending || closeMut.isPending || rejectMut.isPending
+  const pending = closeMut.isPending || reopenMut.isPending
 
   const blocking = violations.filter((v) => v.severity === 'BLOCK')
 
@@ -101,49 +89,30 @@ export function RosterToolbar({ roster }: { roster: RosterResponseDto }) {
         </Badge>
 
         <div className="flex flex-1 flex-wrap justify-end gap-2">
-          {roster.status === 'DRAFT' && (
+          {roster.status === 'DRAFT' && canClose && (
             <Button
-              className="bg-brand text-brand-foreground hover:bg-brand/90"
+              className="bg-approve text-approve-foreground hover:bg-approve/90"
               disabled={pending}
-              onClick={() => completeMut.mutate({ id: roster.id })}
+              onClick={() => closeMut.mutate({ id: roster.id, data: { force: false } })}
             >
-              작성 완료
+              마감
             </Button>
           )}
 
-          {roster.status === 'COMPLETED' && (
+          {roster.status === 'CLOSED' && canClose && (
             <Button
-              className="bg-brand text-brand-foreground hover:bg-brand/90"
+              variant="outline"
+              className="border-reject text-reject hover:bg-reject/5 hover:text-reject"
               disabled={pending}
-              onClick={() => submitMut.mutate({ id: roster.id })}
+              onClick={() => reopenMut.mutate({ id: roster.id })}
             >
-              마감 상신
+              마감취소
             </Button>
           )}
 
-          {roster.status === 'CLOSING_APPROVAL' && (
-            <>
-              <Button
-                variant="outline"
-                className="border-reject text-reject hover:bg-reject/5 hover:text-reject"
-                disabled={pending}
-                onClick={() => setRejectOpen(true)}
-              >
-                마감 반려
-              </Button>
-              <Button
-                className="bg-approve text-approve-foreground hover:bg-approve/90"
-                disabled={pending}
-                onClick={() => closeMut.mutate({ id: roster.id, data: { force: false } })}
-              >
-                마감 승인
-              </Button>
-            </>
-          )}
-
-          {roster.status === 'CLOSED' && (
+          {roster.status === 'CLOSED' && !canClose && (
             <span className="text-sm font-medium text-muted-foreground">
-              마감 완료된 근무표입니다. 변경은 결재를 통해서만 가능합니다.
+              마감 완료된 근무표입니다. 변경은 마감취소(시설장·사무국장) 또는 결재를 통해서만 가능합니다.
             </span>
           )}
         </div>
@@ -155,7 +124,7 @@ export function RosterToolbar({ roster }: { roster: RosterResponseDto }) {
         </div>
       )}
 
-      {blocking.length > 0 && roster.status !== 'CLOSED' && (
+      {blocking.length > 0 && roster.status === 'DRAFT' && (
         <div className="rounded-xl border border-warning/40 bg-warning/10 px-4 py-3">
           <div className="text-sm font-bold text-warning">
             최소 인원 미달 {blocking.length}건 — 마감 시 강행 사유가 필요합니다(D-19)
@@ -208,38 +177,6 @@ export function RosterToolbar({ roster }: { roster: RosterResponseDto }) {
               }
             >
               {pending ? '처리 중…' : '강행 마감'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* 마감 반려 사유 입력 */}
-      <Dialog open={rejectOpen} onOpenChange={setRejectOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>마감 반려 사유</DialogTitle>
-            <DialogDescription>
-              작성자에게 반환됩니다(작성 중 상태로 복귀). 사유 입력이 필요합니다.
-            </DialogDescription>
-          </DialogHeader>
-          <Textarea
-            value={rejectReason}
-            onChange={(e) => setRejectReason(e.target.value)}
-            placeholder="예) 야간 인원 배치를 다시 확인해 주세요."
-            rows={4}
-          />
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setRejectOpen(false)} disabled={pending}>
-              취소
-            </Button>
-            <Button
-              className="bg-reject text-reject-foreground hover:bg-reject/90"
-              disabled={pending || rejectReason.trim().length === 0}
-              onClick={() =>
-                rejectMut.mutate({ id: roster.id, data: { reason: rejectReason.trim() } })
-              }
-            >
-              {pending ? '처리 중…' : '반려 확정'}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -55,8 +55,8 @@ function pad2(n: number): string {
 export function ScheduleGrid({ roster, prevRoster, highlight }: Props) {
   const [year, month] = roster.yearMonth.split('-').map(Number)
   const [presetTarget, setPresetTarget] = useState<PresetTarget | null>(null)
-  // 편집 가능 상태(§4.8)에서만 프리셋 적용·셀 편집 허용 — CLOSED/CLOSING_APPROVAL은 결재 경유·상신 취소 후에만
-  const canEdit = roster.status === 'DRAFT' || roster.status === 'COMPLETED'
+  // 편집 가능 상태(§4.8)에서만 프리셋 적용·셀 편집 허용 — CLOSED는 마감취소 후에만
+  const canEdit = roster.status === 'DRAFT'
   // 날짜 헤더 행 고정(freeze pane) 토글 — 끄면 표 전체가 함께 스크롤된다.
   const [lockHeaders, setLockHeaders] = useState(true)
   // 직원명 컬럼 고정 토글 — 날짜 헤더 고정과 독립적으로 켜고 끌 수 있다.

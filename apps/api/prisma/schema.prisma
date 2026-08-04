@@ -143,7 +143,6 @@ model Employee {
   substituteHolidayLedgersAmended SubstituteHolidayLedger[]  @relation("SubstituteHolidayLedgerAmender")
   substituteHolidayLedgersRevoked SubstituteHolidayLedger[]  @relation("SubstituteHolidayLedgerRevoker")
   notifications                   Notification[]
-  rostersSubmitted                Roster[]                   @relation("RosterSubmitter")
   rostersClosed                   Roster[]                   @relation("RosterCloser")
   scheduleEntries                 ScheduleEntry[]
   attendanceRecords               AttendanceRecord[]
@@ -600,33 +599,27 @@ model DailyStaffingRule {
 
 enum RosterStatus {
   DRAFT
-  COMPLETED
-  CLOSING_APPROVAL
   CLOSED
 }
 
-/// 월 근무표 헤더. [v1.2] 작성중→작성완료→마감결재→마감(§4.8). COMPLETED에서 셀 수정 시 DRAFT 복귀,
-/// 반려 시 DRAFT 복귀 — 전이·로그는 앱 레벨. CLOSED 셀 직접 수정 금지 — 결재 경유로만
+/// 월 근무표 헤더. [v1.4] 작성중(DRAFT) ↔ 마감(CLOSED) 2단계로 단순화(§4.8) — 마감/마감취소는
+/// 시설장·사무국장(job_role)만 수행(앱 레벨 검사, roster-state.service). CLOSED 셀 직접 수정 금지 — 결재 경유로만
 model Roster {
   id               BigInt       @id @default(autoincrement()) @db.UnsignedBigInt
   facilityId       BigInt       @map("facility_id") @db.UnsignedBigInt
   yearMonth        String       @map("year_month") @db.Char(7)
   status           RosterStatus @default(DRAFT)
-  /// [v1.2] 마감 상신자(사회복지사)
-  submittedBy      BigInt?      @map("submitted_by") @db.UnsignedBigInt
-  submittedAt      DateTime?    @map("submitted_at")
-  /// 마감 승인자(사무국장/시설장)
+  /// 마감 처리자(시설장/사무국장) — 마감취소 시 null로 복귀
   closedBy         BigInt?      @map("closed_by") @db.UnsignedBigInt
   closedAt         DateTime?    @map("closed_at")
-  /// [v1.2] 위반 존재 상태의 강행 마감 여부(D-19)
+  /// [v1.2] 위반 존재 상태의 강행 마감 여부(D-19) — 마감취소 시 false로 복귀
   forceClosed      Boolean      @default(false) @map("force_closed")
   /// [v1.2] 강행 마감 사유 — forceClosed=true 시 필수(앱 레벨). 당시 위반 목록은 ValidationResult 스냅샷으로 보존
   forceCloseReason String?      @map("force_close_reason") @db.VarChar(500)
   createdAt        DateTime     @default(now()) @map("created_at")
 
-  facility  Facility  @relation(fields: [facilityId], references: [id])
-  submitter Employee? @relation("RosterSubmitter", fields: [submittedBy], references: [id])
-  closer    Employee? @relation("RosterCloser", fields: [closedBy], references: [id])
+  facility Facility  @relation(fields: [facilityId], references: [id])
+  closer   Employee? @relation("RosterCloser", fields: [closedBy], references: [id])
 
   scheduleEntries   ScheduleEntry[]
   validationResults ValidationResult[]
@@ -759,16 +752,15 @@ enum ValidationSeverity {
 
 enum ValidationSnapshotStage {
   EDIT
-  COMPLETED
   CLOSE
 }
 
-/// 검증 결과 스냅샷 (작성완료·마감 시점 보존 — 사후 감사, D-19 강행 마감 근거)
+/// 검증 결과 스냅샷 (마감 시점 보존 — 사후 감사, D-19 강행 마감 근거)
 model ValidationResult {
   id            BigInt                  @id @default(autoincrement()) @db.UnsignedBigInt
   rosterId      BigInt                  @map("roster_id") @db.UnsignedBigInt
   checkedAt     DateTime                @default(now()) @map("checked_at")
-  /// [v1.2] COMPLETED=작성완료 시 스냅샷(§4.8), CLOSE=마감(강행 포함) 시 위반 목록
+  /// [v1.4] CLOSE=마감(강행 포함) 시 위반 목록 스냅샷
   snapshotStage ValidationSnapshotStage @default(EDIT) @map("snapshot_stage")
   /// 예: MONTHLY_STAFFING_CAREGIVER, NIGHT_ADDON_COND2, BASE_HOURS_SHORTFALL
   ruleCode      String                  @map("rule_code") @db.VarChar(40)

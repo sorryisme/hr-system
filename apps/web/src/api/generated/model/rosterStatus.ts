@@ -10,7 +10,5 @@ export type RosterStatus = typeof RosterStatus[keyof typeof RosterStatus];
 
 export const RosterStatus = {
   DRAFT: 'DRAFT',
-  COMPLETED: 'COMPLETED',
-  CLOSING_APPROVAL: 'CLOSING_APPROVAL',
   CLOSED: 'CLOSED',
 } as const;

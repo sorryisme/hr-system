@@ -639,66 +639,6 @@
         ]
       }
     },
-    "/api/rosters/{id}/complete": {
-      "post": {
-        "operationId": "complete",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RosterTransitionResultDto"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "rosters"
-        ]
-      }
-    },
-    "/api/rosters/{id}/submit-close": {
-      "post": {
-        "operationId": "submitClose",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RosterTransitionResultDto"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "rosters"
-        ]
-      }
-    },
     "/api/rosters/{id}/close": {
       "post": {
         "operationId": "close",
@@ -739,9 +679,9 @@
         ]
       }
     },
-    "/api/rosters/{id}/reject-close": {
+    "/api/rosters/{id}/reopen": {
       "post": {
-        "operationId": "rejectClose",
+        "operationId": "reopen",
         "parameters": [
           {
             "name": "id",
@@ -752,16 +692,6 @@
             }
           }
         ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RejectCloseDto"
-              }
-            }
-          }
-        },
         "responses": {
           "200": {
             "description": "",
@@ -1568,8 +1498,6 @@
         "type": "string",
         "enum": [
           "DRAFT",
-          "COMPLETED",
-          "CLOSING_APPROVAL",
           "CLOSED"
         ]
       },
@@ -2173,17 +2101,6 @@
             "description": "강행 마감 사유 — force=true 시 필수"
           }
         }
-      },
-      "RejectCloseDto": {
-        "type": "object",
-        "properties": {
-          "reason": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "reason"
-        ]
       }
     }
   }
