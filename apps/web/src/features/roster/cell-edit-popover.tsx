@@ -22,6 +22,9 @@ function errorMessage(error: unknown): string {
   return '적용에 실패했습니다. 잠시 후 다시 시도해 주세요.'
 }
 
+// 연차/오전반차/오후반차/병가는 휴가·결재 흐름에서만 반영되며 셀 직접 편집 대상에서 제외한다.
+const EXCLUDED_CODES = new Set(['AL', 'HAM', 'HPM', 'SICK'])
+
 /**
  * 셀 편집 팝오버(§4.8) — 셀 클릭/드래그로 선택한 칸에 근무유형을 일괄 적용.
  * 프리셋 적용과 달리 셀 보호 원칙 없이 항상 덮어쓴다(관리자의 명시적 직접 입력).
@@ -31,7 +34,7 @@ export function CellEditPopover({ rosterId, anchor, cells, onClose }: Props) {
   const open = cells.length > 0 && anchor !== null
 
   const shiftTypesQuery = useListShiftTypes({ query: { enabled: open } })
-  const shiftTypes = shiftTypesQuery.data?.data ?? []
+  const shiftTypes = (shiftTypesQuery.data?.data ?? []).filter((s) => !EXCLUDED_CODES.has(s.code))
 
   const updateMut = useUpdateEntries({
     mutation: {

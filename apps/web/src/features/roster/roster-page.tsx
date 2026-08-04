@@ -37,6 +37,14 @@ export function RosterPage() {
   const roster = rosterQuery.data?.data
   const [, monthStr] = yearMonth.split('-')
 
+  // 전월 마지막 며칠(§ 근무표 앞부분 미리보기) 표기를 위해 전월 근무표도 함께 조회.
+  // 전월 근무표가 없어도(404) 근무표 자체 사용에는 영향이 없어야 하므로 별도 쿼리로 분리.
+  const prevRosterQuery = useGetRoster(
+    { yearMonth: shiftMonth(yearMonth, -1) },
+    { query: { retry: false } },
+  )
+  const prevRoster = prevRosterQuery.data?.data
+
   const createMut = useCreateRoster({
     mutation: {
       onSuccess: () =>
@@ -134,7 +142,7 @@ export function RosterPage() {
               근무표를 불러오지 못했습니다. API 서버가 실행 중인지 확인해 주세요.
             </div>
           ) : roster ? (
-            <ScheduleGrid roster={roster} highlight={highlight} />
+            <ScheduleGrid roster={roster} prevRoster={prevRoster} highlight={highlight} />
           ) : null}
         </main>
 

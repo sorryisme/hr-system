@@ -42,7 +42,7 @@ export function AppShell() {
   }
 
   return (
-    <div className="flex min-h-svh bg-background font-sans text-foreground">
+    <div className="flex h-svh bg-background font-sans text-foreground">
       <aside className="flex w-[220px] shrink-0 flex-col gap-1 border-r border-sidebar-border bg-sidebar p-3">
         <div className="px-2.5 pb-5">
           <img src={logoWordmark} alt="늘봄실버타운요양원" className="h-10 w-auto" />
