@@ -27,14 +27,20 @@ export function RequestCard({
           사유: {request.reason}
         </div>
       ) : null}
-      {onCancel && request.status === 'PENDING' && !request.pendingCancellation ? (
+      {onCancel &&
+      (request.status === 'PENDING' || request.status === 'APPROVED') &&
+      !request.pendingCancellation ? (
         <Button
           variant="outline"
           onClick={() => onCancel(request.id)}
           disabled={isCanceling}
           className="mt-1 h-auto w-full rounded-2xl border-2 py-3.5 text-base font-bold text-secondary-foreground"
         >
-          {isCanceling ? '취소하는 중…' : '신청 취소'}
+          {isCanceling
+            ? '취소하는 중…'
+            : request.requiresCancellationApproval
+              ? '취소 신청'
+              : '신청 취소'}
         </Button>
       ) : null}
     </Card>

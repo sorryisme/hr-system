@@ -464,14 +464,48 @@ describe('LeaveService', () => {
       await expect(service.cancelRequest(4n, '1')).rejects.toThrow(NotFoundException);
     });
 
-    it('이미 종결된 건은 ConflictException', async () => {
+    it('이미 종결된 건(REJECTED/CANCELED 등)은 ConflictException', async () => {
       tx.approvalRequest.findUnique.mockResolvedValue({
         id: 1n,
         requesterId: 4n,
-        status: ApprovalRequestStatus.APPROVED,
+        status: ApprovalRequestStatus.REJECTED,
       });
 
       await expect(service.cancelRequest(4n, '1')).rejects.toThrow(ConflictException);
+    });
+
+    it('최종 승인(APPROVED)된 건도 즉시 취소하지 않고 취소 요청을 생성한다', async () => {
+      tx.approvalRequest.findUnique.mockResolvedValue({
+        id: 1n,
+        facilityId: 1n,
+        requesterId: 4n,
+        status: ApprovalRequestStatus.APPROVED,
+        type: ApprovalRequestType.ANNUAL,
+        leaveDays: decimal('2.0'),
+        createdAt: new Date('2026-07-15T00:00:00Z'),
+        targetDates: [{ targetDate: new Date('2026-07-21T00:00:00Z') }],
+      });
+      tx.approvalLine.findMany.mockResolvedValue([
+        line(1, { approverId: 3n }),
+        line(2, { approverId: 2n }),
+        line(3, { approverId: 1n }),
+      ]);
+
+      const result = await service.cancelRequest(4n, '1');
+
+      expect(result).toEqual({ result: 'CANCELLATION_REQUESTED' });
+      // 원건은 건드리지 않는다 — used 유지, 상태 전이는 취소 요청이 승인될 때 이루어진다
+      expect(tx.approvalRequest.updateMany).not.toHaveBeenCalled();
+      expect(tx.leaveBalance.update).not.toHaveBeenCalled();
+      expect(tx.approvalRequest.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            type: ApprovalRequestType.CANCEL,
+            refRequestId: 1n,
+            requesterId: 4n,
+          }),
+        }),
+      );
     });
   });
 });

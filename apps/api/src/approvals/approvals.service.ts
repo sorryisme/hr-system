@@ -390,8 +390,16 @@ export class ApprovalsService {
     return req;
   }
 
-  /// 취소 요청(type=CANCEL)이 최종 승인되면 원건(refRequestId)을 CANCELED로 전환하고
-  /// reserved를 반환한다. 원건이 이미 다른 경로로 종결됐다면(방어적) 아무 것도 하지 않는다.
+  /// 취소 요청(type=CANCEL)이 최종 승인되면 원건(refRequestId)을 종결 상태로 전환하고
+  /// 잔여를 반환한다. 원건이 취소 신청 시점에 INTERIM_APPROVED였으면 CANCELED로,
+  /// APPROVED(확정)였으면 CANCELED_AFTER_APPROVAL로 전환한다 — 최종 승인 시 reserved가
+  /// used로 이관되므로(settleBalance) 확정 건은 used를, 그 외에는 reserved를 되돌린다.
+  /// 원건이 이미 다른 경로로 종결됐다면(방어적) 아무 것도 하지 않는다.
+  ///
+  /// 동시성 가드: 같은 원건을 참조하는 취소 요청이 (버그·경합으로) 둘 이상 동시에
+  /// 최종 승인되는 경우를 대비해, 읽은 시점의 status를 조건으로 하는 updateMany로
+  /// 전이한다. 다른 트랜잭션이 먼저 처리했다면 count=0이 되어 이력·잔여 반환·근무표
+  /// 원복을 전부 건너뛴다 — used/reserved가 중복 차감되는 것을 방지한다.
   private async applyCancellation(
     tx: Prisma.TransactionClient,
     refRequestId: bigint,
@@ -401,14 +409,23 @@ export class ApprovalsService {
       where: { id: refRequestId },
       include: { targetDates: true },
     });
-    if (!original || !OPEN_STATUSES.includes(original.status)) {
+    const wasApproved = original?.status === ApprovalRequestStatus.APPROVED;
+    if (!original || !(OPEN_STATUSES.includes(original.status) || wasApproved)) {
       return null;
     }
 
-    await tx.approvalRequest.update({
-      where: { id: refRequestId },
-      data: { status: ApprovalRequestStatus.CANCELED, finalizedAt: new Date() },
+    const updated = await tx.approvalRequest.updateMany({
+      where: { id: refRequestId, status: original.status },
+      data: {
+        status: wasApproved
+          ? ApprovalRequestStatus.CANCELED_AFTER_APPROVAL
+          : ApprovalRequestStatus.CANCELED,
+        finalizedAt: new Date(),
+      },
     });
+    if (updated.count === 0) {
+      return null;
+    }
 
     await tx.approvalHistory.create({
       data: { requestId: refRequestId, actorId, action: 'CANCEL' },
@@ -424,20 +441,18 @@ export class ApprovalsService {
           balanceYear,
         },
       };
+      const data = wasApproved
+        ? { used: { decrement: original.leaveDays } }
+        : { reserved: { decrement: original.leaveDays } };
       if (original.type === ApprovalRequestType.SUBSTITUTE_HOLIDAY) {
-        await tx.substituteHolidayBalance.update({
-          where,
-          data: { reserved: { decrement: original.leaveDays } },
-        });
+        await tx.substituteHolidayBalance.update({ where, data });
       } else {
-        await tx.leaveBalance.update({
-          where,
-          data: { reserved: { decrement: original.leaveDays } },
-        });
+        await tx.leaveBalance.update({ where, data });
       }
     }
 
-    // 원건이 근무표에 반영해둔 셀(있다면)을 원복하도록, 트랜잭션 커밋 이후 발행할 정보를 돌려준다.
+    // 원건이 근무표에 반영해둔 셀(있다면 — 확정 건이면 색칠된 확정 셀)을 원복하도록,
+    // 트랜잭션 커밋 이후 발행할 정보를 돌려준다.
     return original;
   }
 
