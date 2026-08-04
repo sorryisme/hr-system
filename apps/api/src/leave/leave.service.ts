@@ -30,16 +30,23 @@ const LEAVE_TYPES: ApprovalRequestType[] = [
   ApprovalRequestType.SUBSTITUTE_HOLIDAY,
 ];
 
-/// 취소는 아직 전이 로직이 없다(D-2 이중신청 방지 범위 밖) — 목록에서 제외
+/// 종결된 취소 건은 "내 신청 목록"에서 제외한다(취소 신청 진행 중인 건은 원건 상태로 계속 노출)
 const EXCLUDED_STATUSES: ApprovalRequestStatus[] = [
   ApprovalRequestStatus.CANCELED,
   ApprovalRequestStatus.CANCELED_AFTER_APPROVAL,
 ];
 
-/// 진행 중(대기·1차 이상 승인) — 제출 시 이중신청 차단(D-2)과 취소 가능 여부 판단에 공용으로 쓰인다
+/// 진행 중(대기·1차 이상 승인) — 제출 시 이중신청 차단(D-2)에 쓰인다
 const OPEN_STATUSES: ApprovalRequestStatus[] = [
   ApprovalRequestStatus.PENDING,
   ApprovalRequestStatus.INTERIM_APPROVED,
+];
+
+/// 취소를 시도할 수 있는 상태 전체(OPEN_STATUSES + 확정 승인). 확정 승인 건은 결재
+/// 경유(취소 신청)로만 취소되므로 OPEN_STATUSES와는 별도로 취소 가능 여부 판단에만 쓰인다.
+const CANCELLABLE_VIA_REQUEST: ApprovalRequestStatus[] = [
+  ApprovalRequestStatus.INTERIM_APPROVED,
+  ApprovalRequestStatus.APPROVED,
 ];
 
 const ZERO_DETAIL: LeaveBalanceDetailDto = {
@@ -204,12 +211,13 @@ export class LeaveService {
 
   /// 본인 신청 취소.
   /// - PENDING(아무도 승인 안 함): 즉시 취소 — 기존과 동일.
-  /// - INTERIM_APPROVED(1차 이상 승인 완료): 즉시 취소하지 않고 관리자 승인이 필요한
-  ///   별도 취소 요청(type=CANCEL, refRequestId=이 건)을 만든다. 원건은 그대로 두고
-  ///   (reserved 유지) 취소 요청이 승인되면 그때 원건을 CANCELED로 전환한다
-  ///   (approvals.service.ts applyCancellation). 취소 요청이 진행 중인 동안 원건 자체의
-  ///   승인 진행은 approvals.service.ts의 결재 가드가 차단한다.
-  /// - APPROVED 이후 취소(CANCELED_AFTER_APPROVAL)는 범위 밖 — 그대로 거부.
+  /// - INTERIM_APPROVED(1차 이상 승인 완료) · APPROVED(최종 확정): 즉시 취소하지 않고
+  ///   관리자 승인이 필요한 별도 취소 요청(type=CANCEL, refRequestId=이 건)을 만든다.
+  ///   원건은 그대로 두고(INTERIM_APPROVED는 reserved, APPROVED는 used 유지) 취소 요청이
+  ///   승인되면 그때 원건을 CANCELED(INTERIM_APPROVED였던 경우) 또는
+  ///   CANCELED_AFTER_APPROVAL(APPROVED였던 경우)로 전환한다(approvals.service.ts
+  ///   applyCancellation). 취소 요청이 진행 중인 동안 원건 자체의 승인 진행은
+  ///   approvals.service.ts의 결재 가드가 차단한다.
   async cancelRequest(
     employeeId: bigint,
     id: string,
@@ -228,11 +236,14 @@ export class LeaveService {
             message: '신청 건을 찾을 수 없습니다.',
           });
         }
-        if (!OPEN_STATUSES.includes(req.status)) {
+        if (
+          !OPEN_STATUSES.includes(req.status) &&
+          req.status !== ApprovalRequestStatus.APPROVED
+        ) {
           throw this.conflict();
         }
 
-        if (req.status === ApprovalRequestStatus.INTERIM_APPROVED) {
+        if (CANCELLABLE_VIA_REQUEST.includes(req.status)) {
           await this.createCancellationRequest(tx, req);
           return 'CANCELLATION_REQUESTED';
         }
@@ -271,6 +282,10 @@ export class LeaveService {
         }
         return 'CANCELED';
       },
+      // SERIALIZABLE: createCancellationRequest의 "조회 후 생성"(alreadyRequested 체크 →
+      // create)이 동시 취소 요청 2건을 만들지 못하도록 한다 — DB 유일성 제약이 없는 대신
+      // 트랜잭션 격리 수준으로 막는다. 이 엔드포인트는 호출 빈도가 낮아 비용 영향은 미미하다.
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
 
     return { result };

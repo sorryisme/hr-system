@@ -480,8 +480,8 @@ describe('ApprovalsService 상태머신', () => {
 
       await service.approveRequest('10', '3');
 
-      expect(tx.approvalRequest.update).toHaveBeenCalledWith({
-        where: { id: 1n },
+      expect(tx.approvalRequest.updateMany).toHaveBeenCalledWith({
+        where: { id: 1n, status: 'INTERIM_APPROVED' },
         data: containing({ status: 'CANCELED' }),
       });
       expect(tx.leaveBalance.update).toHaveBeenCalledWith(
@@ -495,6 +495,78 @@ describe('ApprovalsService 상태머신', () => {
       expect(tx.approvalHistory.create).toHaveBeenCalledWith({
         data: containing({ requestId: 1n, action: 'CANCEL' }),
       });
+    });
+
+    it('취소 요청(type=CANCEL) 최종 승인 → 원건이 APPROVED(확정)였으면 CANCELED_AFTER_APPROVAL 전환 + used 반환', async () => {
+      const cancelRequest = transitionRow({
+        id: 10n,
+        type: 'CANCEL',
+        refRequestId: 1n,
+        leaveDays: null,
+        requestLines: [line(1, 3n)],
+      });
+      const original = transitionRow({
+        id: 1n,
+        status: 'APPROVED',
+        currentStep: 3,
+        leaveDays: new Prisma.Decimal('2.0'),
+      });
+      tx.approvalRequest.findUnique
+        .mockResolvedValueOnce(cancelRequest) // loadForTransition: 취소 요청 자체를 로드
+        .mockResolvedValueOnce(original); // applyCancellation: 원건을 로드
+
+      await service.approveRequest('10', '3');
+
+      expect(tx.approvalRequest.updateMany).toHaveBeenCalledWith({
+        where: { id: 1n, status: 'APPROVED' },
+        data: containing({ status: 'CANCELED_AFTER_APPROVAL' }),
+      });
+      expect(tx.leaveBalance.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            employeeId_balanceYear: { employeeId: 5n, balanceYear: 2026 },
+          },
+          data: { used: { decrement: new Prisma.Decimal('2.0') } },
+        }),
+      );
+      expect(tx.approvalHistory.create).toHaveBeenCalledWith({
+        data: containing({ requestId: 1n, action: 'CANCEL' }),
+      });
+    });
+
+    it('원건 취소 확정 경합: 다른 트랜잭션이 먼저 처리했다면(updateMany count=0) 잔여를 이중 차감하지 않는다', async () => {
+      const cancelRequest = transitionRow({
+        id: 10n,
+        type: 'CANCEL',
+        refRequestId: 1n,
+        leaveDays: null,
+        requestLines: [line(1, 3n)],
+      });
+      const original = transitionRow({
+        id: 1n,
+        status: 'APPROVED',
+        currentStep: 3,
+        leaveDays: new Prisma.Decimal('2.0'),
+      });
+      tx.approvalRequest.findUnique
+        .mockResolvedValueOnce(cancelRequest) // loadForTransition: 취소 요청 자체를 로드
+        .mockResolvedValueOnce(original); // applyCancellation: 원건을 로드
+      tx.approvalRequest.updateMany
+        .mockResolvedValueOnce({ count: 1 }) // 취소 요청(CANCEL) 자체의 상태 전이는 정상 성공
+        .mockResolvedValueOnce({ count: 0 }); // 원건은 동시에 다른 취소 요청이 먼저 확정시킴(경합 패배)
+
+      await service.approveRequest('10', '3');
+
+      // 원건에 대한 이력 기록·잔여 차감·근무표 원복이 전부 스킵돼야 한다 —
+      // 이미 다른 트랜잭션이 처리했으므로 여기서 또 처리하면 used가 이중 차감된다.
+      expect(tx.leaveBalance.update).not.toHaveBeenCalled();
+      expect(tx.approvalHistory.create).not.toHaveBeenCalledWith(
+        containing({ requestId: 1n, action: 'CANCEL' }),
+      );
+      expect(bus.publish).not.toHaveBeenCalledWith(
+        REQUEST_REVERTED,
+        expect.anything(),
+      );
     });
 
     it('취소 요청 최종 승인 → 원건이 반영해둔 근무표 셀 원복 이벤트(REQUEST_REVERTED)를 원건 기준으로 발행한다', async () => {
@@ -576,8 +648,8 @@ describe('ApprovalsService 상태머신', () => {
           data: containing({ status: 'APPROVED', currentStep: 1 }),
         }),
       );
-      expect(tx.approvalRequest.update).toHaveBeenCalledWith({
-        where: { id: 1n },
+      expect(tx.approvalRequest.updateMany).toHaveBeenCalledWith({
+        where: { id: 1n, status: 'INTERIM_APPROVED' },
         data: containing({ status: 'CANCELED' }),
       });
     });

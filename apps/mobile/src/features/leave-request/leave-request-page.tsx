@@ -25,6 +25,8 @@ function toLeaveRequest(dto: MyLeaveRequestDto): LeaveRequest {
     reason: dto.reason,
     postApply: dto.isRetroactive,
     pendingCancellation: dto.pendingCancellation,
+    requiresCancellationApproval:
+      dto.status === 'INTERIM_APPROVED' || dto.status === 'APPROVED',
   }
 }
 
