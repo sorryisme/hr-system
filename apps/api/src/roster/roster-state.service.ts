@@ -1,11 +1,13 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
 import {
+  JobRole,
   Prisma,
   Roster,
   RosterStatus,
@@ -30,11 +32,15 @@ interface Finding {
   detail: Record<string, unknown>;
 }
 
+/// 마감/마감취소를 수행할 수 있는 직책(§1.3) — system_role은 둘 다 ADMIN이라 permissions.guard의
+/// roster:close만으로는 차등이 안 돼, 앱 레벨에서 job_role을 추가로 검사한다.
+const CLOSER_JOB_ROLES: readonly JobRole[] = ['DIRECTOR', 'OFFICE_MANAGER'];
+
 /// 근무표 상태머신(§4.8) + 검증(§4.5)·마감 처리(D-19).
-///   DRAFT ─작성완료→ COMPLETED ─마감상신→ CLOSING_APPROVAL ─승인→ CLOSED
-///                     └─셀수정→ DRAFT        └─반려→ DRAFT
-/// 권한: 편집/작성완료/마감상신=roster:write, 마감승인/반려=roster:close(컨트롤러에서 부여).
-/// [결정 대기] job_role 세부 차등(작성=사회복지사 / 마감=사무국장·시설장 §1.3), D-21(지난 일자 변경 결재).
+///   DRAFT(작성중) ─마감→ CLOSED(마감)
+///        ▲───────마감취소───────┘
+/// 권한: 편집=roster:write, 마감/마감취소=roster:close + job_role(시설장·사무국장)(컨트롤러+본 서비스에서 검사).
+/// [결정 대기] D-21(지난 일자 변경 결재).
 @Injectable()
 export class RosterStateService {
   private readonly logger = new Logger(RosterStateService.name);
@@ -42,7 +48,7 @@ export class RosterStateService {
   constructor(private readonly prisma: PrismaService) {}
 
   // ---------------------------------------------------------------
-  // 셀 편집 — 드래그 다건 입력. COMPLETED에서 수정 시 DRAFT로 복귀(§4.8)
+  // 셀 편집 — 드래그 다건 입력. DRAFT에서만 허용(§4.8)
   // ---------------------------------------------------------------
   async updateEntries(
     id: string,
@@ -50,18 +56,11 @@ export class RosterStateService {
     entries: RosterEntryInputDto[],
   ): Promise<RosterTransitionResultDto> {
     const roster = await this.loadOwned(id, facilityId);
-    // 편집은 DRAFT/COMPLETED에서만 허용(§4.8). CLOSED=결재 경유만, CLOSING_APPROVAL=승인 중 불변.
+    // 편집은 DRAFT에서만 허용(§4.8). CLOSED=결재 경유만(마감취소 후 편집).
     if (roster.status === RosterStatus.CLOSED) {
       throw new ConflictException({
         code: 'ROSTER_CLOSED',
-        message: '마감된 근무표는 직접 수정할 수 없습니다(결재 경유만 가능).',
-      });
-    }
-    if (roster.status === RosterStatus.CLOSING_APPROVAL) {
-      throw new ConflictException({
-        code: 'ROSTER_UNDER_APPROVAL',
-        message:
-          '마감 승인 중인 근무표는 수정할 수 없습니다(상신 취소·반려 후 편집).',
+        message: '마감된 근무표는 직접 수정할 수 없습니다(마감취소 후 편집).',
       });
     }
 
@@ -109,7 +108,7 @@ export class RosterStateService {
 
     await this.prisma.$transaction(async (tx) => {
       // 동시성 가드: loadOwned로 상태를 확인한 시점과 이 트랜잭션 시작 사이에 다른 요청이
-      // 마감 상신/마감(CLOSING_APPROVAL·CLOSED)으로 전이시켰을 수 있다. status를 WHERE
+      // 마감(CLOSED)으로 전이시켰을 수 있다. status를 WHERE
       // 조건에 포함한 UPDATE는 DB 행 잠금 하에 원자적으로 검사되므로, 그 사이 상태가
       // 바뀌었다면 count=0으로 감지해 셀 쓰기 전에 즉시 중단한다.
       const guard = await tx.roster.updateMany({
@@ -153,27 +152,16 @@ export class RosterStateService {
           },
         });
       }
-      // COMPLETED → 셀 수정 시 DRAFT 복귀(§4.8 전이표)
-      if (roster.status === RosterStatus.COMPLETED) {
-        await tx.roster.update({
-          where: { id: roster.id },
-          data: { status: RosterStatus.DRAFT },
-        });
-      }
     });
 
-    const status =
-      roster.status === RosterStatus.COMPLETED
-        ? RosterStatus.DRAFT
-        : roster.status;
     this.logger.log(
-      `근무표 셀 편집: roster ${roster.id}, ${entries.length}건, status=${status}`,
+      `근무표 셀 편집: roster ${roster.id}, ${entries.length}건, status=${roster.status}`,
     );
-    return { id: roster.id.toString(), status, violations: [] };
+    return { id: roster.id.toString(), status: roster.status, violations: [] };
   }
 
   // ---------------------------------------------------------------
-  // 프리셋 적용 — 직원별 근무 패턴 일괄 입력(§4.6/§4.8). COMPLETED에서 적용 시 DRAFT 복귀.
+  // 프리셋 적용 — 직원별 근무 패턴 일괄 입력(§4.6/§4.8). DRAFT에서만 허용.
   // 승인 반영(APPROVAL)·수동 편집(MANUAL) 셀은 관리자 의도적 확정이므로 덮어쓰지 않고 건너뛴다
   // (DDL v1.3 schedule_entry 코멘트 — "승인 연차가 있는 셀은 프리셋이 덮어쓰지 않음").
   // ---------------------------------------------------------------
@@ -186,14 +174,7 @@ export class RosterStateService {
     if (roster.status === RosterStatus.CLOSED) {
       throw new ConflictException({
         code: 'ROSTER_CLOSED',
-        message: '마감된 근무표는 직접 수정할 수 없습니다(결재 경유만 가능).',
-      });
-    }
-    if (roster.status === RosterStatus.CLOSING_APPROVAL) {
-      throw new ConflictException({
-        code: 'ROSTER_UNDER_APPROVAL',
-        message:
-          '마감 승인 중인 근무표는 수정할 수 없습니다(상신 취소·반려 후 편집).',
+        message: '마감된 근무표는 직접 수정할 수 없습니다(마감취소 후 편집).',
       });
     }
 
@@ -283,7 +264,7 @@ export class RosterStateService {
 
     await this.prisma.$transaction(async (tx) => {
       // 동시성 가드: 최초 상태 확인(loadOwned)과 이 트랜잭션 시작 사이에 다른 요청이
-      // 마감 상신/마감(CLOSING_APPROVAL·CLOSED)으로 전이시켰을 수 있다. status를 WHERE 조건에
+      // 마감(CLOSED)으로 전이시켰을 수 있다. status를 WHERE 조건에
       // 포함한 UPDATE는 DB 행 잠금 하에 원자적으로 검사되므로, 그 사이 상태가 바뀌었다면
       // count=0으로 감지해 셀 쓰기 전에 즉시 중단한다(그렇지 않으면 이미 마감된 근무표가
       // 프리셋으로 조용히 덮어써질 수 있다).
@@ -371,12 +352,6 @@ export class RosterStateService {
         }
       }
 
-      if (appliedCount > 0 && roster.status === RosterStatus.COMPLETED) {
-        await tx.roster.update({
-          where: { id: roster.id },
-          data: { status: RosterStatus.DRAFT },
-        });
-      }
     });
 
     this.logger.log(
@@ -387,79 +362,19 @@ export class RosterStateService {
   }
 
   // ---------------------------------------------------------------
-  // 작성 완료 — DRAFT → COMPLETED. 검증 스냅샷(§4.8)
-  // ---------------------------------------------------------------
-  async complete(
-    id: string,
-    facilityId: string,
-  ): Promise<RosterTransitionResultDto> {
-    const roster = await this.loadOwned(id, facilityId);
-    this.assertStatus(roster, [RosterStatus.DRAFT]);
-
-    const findings = await this.validate(roster);
-    await this.prisma.$transaction(async (tx) => {
-      await this.snapshot(
-        tx,
-        roster.id,
-        ValidationSnapshotStage.COMPLETED,
-        findings,
-      );
-      await tx.roster.update({
-        where: { id: roster.id },
-        data: { status: RosterStatus.COMPLETED },
-      });
-    });
-
-    this.logger.log(
-      `근무표 작성완료: roster ${roster.id}, 위반 ${findings.length}건`,
-    );
-    return {
-      id: roster.id.toString(),
-      status: RosterStatus.COMPLETED,
-      violations: findings.map((f) => this.toFindingDto(f)),
-    };
-  }
-
-  // ---------------------------------------------------------------
-  // 마감 상신 — COMPLETED → CLOSING_APPROVAL
-  // ---------------------------------------------------------------
-  async submitClose(
-    id: string,
-    facilityId: string,
-    actorId: string,
-  ): Promise<RosterTransitionResultDto> {
-    const roster = await this.loadOwned(id, facilityId);
-    this.assertStatus(roster, [RosterStatus.COMPLETED]);
-
-    await this.prisma.roster.update({
-      where: { id: roster.id },
-      data: {
-        status: RosterStatus.CLOSING_APPROVAL,
-        submittedBy: BigInt(actorId),
-        submittedAt: new Date(),
-      },
-    });
-    // TODO(스키마 갭): 마감 결재자(사무국장/시설장) 알림 — notification에 roster 종류·FK가 없어 후속.
-    this.logger.log(`근무표 마감 상신: roster ${roster.id}, by ${actorId}`);
-    return {
-      id: roster.id.toString(),
-      status: RosterStatus.CLOSING_APPROVAL,
-      violations: [],
-    };
-  }
-
-  // ---------------------------------------------------------------
-  // 마감 승인 — CLOSING_APPROVAL → CLOSED. 위반(BLOCK) 시 강행 사유 필수(D-19)
+  // 마감 — DRAFT → CLOSED. 위반(BLOCK) 시 강행 사유 필수(D-19). 시설장·사무국장만(§1.3)
   // ---------------------------------------------------------------
   async close(
     id: string,
     facilityId: string,
     actorId: string,
+    actorJobRole: JobRole,
     force: boolean,
     reason: string | undefined,
   ): Promise<RosterTransitionResultDto> {
+    this.assertCloserRole(actorJobRole);
     const roster = await this.loadOwned(id, facilityId);
-    this.assertStatus(roster, [RosterStatus.CLOSING_APPROVAL]);
+    this.assertStatus(roster, [RosterStatus.DRAFT]);
 
     const findings = await this.validate(roster);
     const blocking = findings.filter(
@@ -510,29 +425,28 @@ export class RosterStateService {
   }
 
   // ---------------------------------------------------------------
-  // 마감 반려 — CLOSING_APPROVAL → DRAFT (사유 필수)
+  // 마감취소 — CLOSED → DRAFT. 사유 불필요, 즉시 편집 가능 상태로 복귀. 시설장·사무국장만(§1.3)
   // ---------------------------------------------------------------
-  async rejectClose(
+  async reopen(
     id: string,
     facilityId: string,
-    actorId: string,
-    reason: string,
+    actorJobRole: JobRole,
   ): Promise<RosterTransitionResultDto> {
+    this.assertCloserRole(actorJobRole);
     const roster = await this.loadOwned(id, facilityId);
-    this.assertStatus(roster, [RosterStatus.CLOSING_APPROVAL]);
+    this.assertStatus(roster, [RosterStatus.CLOSED]);
 
     await this.prisma.roster.update({
       where: { id: roster.id },
       data: {
         status: RosterStatus.DRAFT,
-        submittedBy: null,
-        submittedAt: null,
+        closedBy: null,
+        closedAt: null,
+        forceClosed: false,
+        forceCloseReason: null,
       },
     });
-    // TODO(스키마 갭): 반려 사유 저장 + 사회복지사 알림 — roster에 반려사유 컬럼/알림 종류 부재로 후속(로그만).
-    this.logger.log(
-      `근무표 마감 반려: roster ${roster.id}, by ${actorId}, 사유="${reason.trim()}"`,
-    );
+    this.logger.log(`근무표 마감취소: roster ${roster.id}`);
     return {
       id: roster.id.toString(),
       status: RosterStatus.DRAFT,
@@ -626,6 +540,17 @@ export class RosterStateService {
       throw new ConflictException({
         code: 'INVALID_TRANSITION',
         message: `현재 상태(${roster.status})에서 허용되지 않는 전이입니다.`,
+      });
+    }
+  }
+
+  /// 마감/마감취소는 roster:close 권한(ADMIN 이상)에 더해 시설장·사무국장만 수행할 수 있다(§1.3).
+  /// system_role이 ADMIN 하나로 뭉뚱그려져 있어 job_role로 추가 차등한다(permissions.guard.ts 참고).
+  private assertCloserRole(jobRole: JobRole): void {
+    if (!CLOSER_JOB_ROLES.includes(jobRole)) {
+      throw new ForbiddenException({
+        code: 'PERMISSION_DENIED',
+        message: '마감/마감취소는 시설장 또는 사무국장만 처리할 수 있습니다.',
       });
     }
   }

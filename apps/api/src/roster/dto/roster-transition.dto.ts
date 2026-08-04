@@ -1,8 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { RosterStatus, ValidationSeverity } from '@prisma/client';
-import { IsBoolean, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsOptional, IsString } from 'class-validator';
 
-/// 마감(close) 요청. 위반(BLOCK)이 있으면 원칙 차단, 사무국장/시설장이 사유 입력 시 강행(D-19).
+/// 마감(close) 요청. 위반(BLOCK)이 있으면 원칙 차단, 시설장/사무국장이 사유 입력 시 강행(D-19).
 export class CloseRosterDto {
   @ApiPropertyOptional({
     default: false,
@@ -16,14 +16,6 @@ export class CloseRosterDto {
   @IsOptional()
   @IsString()
   reason?: string;
-}
-
-/// 마감 반려(reject-close). 사유 필수 → 사회복지사에게 반환(DRAFT 복귀).
-export class RejectCloseDto {
-  @ApiProperty()
-  @IsString()
-  @IsNotEmpty()
-  reason!: string;
 }
 
 export class ValidationFindingDto {
@@ -41,7 +33,7 @@ export class ValidationFindingDto {
   detail!: Record<string, unknown> | null;
 }
 
-/// 상태 전이 결과. 검증을 수행하는 전이(작성완료·마감)는 violations를 함께 반환한다.
+/// 상태 전이 결과. 검증을 수행하는 전이(마감)는 violations를 함께 반환한다.
 export class RosterTransitionResultDto {
   @ApiProperty({ type: String })
   id!: string;

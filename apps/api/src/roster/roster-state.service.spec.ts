@@ -1,4 +1,9 @@
-import { BadRequestException, ConflictException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+} from '@nestjs/common';
+import type { JobRole } from '@prisma/client';
 import { RosterStateService } from './roster-state.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ApplyPresetDto } from './dto/apply-preset.dto';
@@ -192,20 +197,6 @@ describe('RosterStateService.applyPreset', () => {
     ]);
   });
 
-  it('COMPLETED 상태에서 적용하면 DRAFT로 복귀한다', async () => {
-    prisma.roster.findUnique.mockResolvedValue({
-      ...rosterRow,
-      status: 'COMPLETED',
-    });
-
-    await service.applyPreset('100', facilityId, baseDto());
-
-    expect(prisma.roster.update).toHaveBeenCalledWith({
-      where: { id: 100n },
-      data: { status: 'DRAFT' },
-    });
-  });
-
   it('트랜잭션 시작 직전 다른 요청이 상태를 바꾸면(동시성 가드) 셀을 쓰지 않고 중단한다', async () => {
     // loadOwned 시점엔 DRAFT였으나, 트랜잭션 진입 시점엔 이미 다른 요청이 마감 등으로
     // 전이시켜 status WHERE 조건이 더 이상 매치되지 않는 상황(guard.count=0)을 시뮬레이션.
@@ -303,21 +294,6 @@ describe('RosterStateService.updateEntries', () => {
     expect(prisma.scheduleEntry.upsert).toHaveBeenCalledTimes(1);
   });
 
-  it('COMPLETED 상태에서 편집하면 DRAFT로 복귀한다', async () => {
-    prisma.roster.findUnique.mockResolvedValue({
-      ...rosterRow,
-      status: 'COMPLETED',
-    });
-
-    const result = await service.updateEntries('100', facilityId, entries());
-
-    expect(result.status).toBe('DRAFT');
-    expect(prisma.roster.update).toHaveBeenCalledWith({
-      where: { id: 100n },
-      data: { status: 'DRAFT' },
-    });
-  });
-
   it('트랜잭션 시작 직전 다른 요청이 상태를 바꾸면(동시성 가드) 셀을 쓰지 않고 중단한다', async () => {
     // loadOwned 시점엔 DRAFT였으나, 트랜잭션 진입 시점엔 이미 다른 요청이 마감 등으로
     // 전이시켜 status WHERE 조건이 더 이상 매치되지 않는 상황(guard.count=0)을 시뮬레이션.
@@ -341,17 +317,6 @@ describe('RosterStateService.updateEntries', () => {
     ).rejects.toThrow(ConflictException);
   });
 
-  it('CLOSING_APPROVAL 근무표는 편집을 거부한다', async () => {
-    prisma.roster.findUnique.mockResolvedValue({
-      ...rosterRow,
-      status: 'CLOSING_APPROVAL',
-    });
-
-    await expect(
-      service.updateEntries('100', facilityId, entries()),
-    ).rejects.toThrow(ConflictException);
-  });
-
   it('알 수 없는 근무유형 코드는 400', async () => {
     await expect(
       service.updateEntries('100', facilityId, [
@@ -366,5 +331,141 @@ describe('RosterStateService.updateEntries', () => {
     await expect(
       service.updateEntries('100', facilityId, entries()),
     ).rejects.toThrow(BadRequestException);
+  });
+});
+
+// 마감/마감취소(§4.8, §1.3) — DIRECTOR/OFFICE_MANAGER만 수행 가능한지, DRAFT↔CLOSED 전이가
+// 올바른지 검증한다.
+describe('RosterStateService.close / reopen', () => {
+  type CloseTxPrismaMock = {
+    validationResult: { deleteMany: jest.Mock; createMany: jest.Mock };
+    roster: { update: jest.Mock };
+  };
+  type PrismaMock = {
+    roster: { findUnique: jest.Mock; update: jest.Mock };
+    scheduleEntry: { findMany: jest.Mock };
+    dailyStaffingRule: { findMany: jest.Mock };
+    validationResult: { deleteMany: jest.Mock; createMany: jest.Mock };
+    $transaction: jest.Mock;
+  };
+
+  let prisma: PrismaMock;
+  let service: RosterStateService;
+
+  const facilityId = '1';
+  const draftRoster = {
+    id: 100n,
+    facilityId: 1n,
+    yearMonth: '2026-08',
+    status: 'DRAFT',
+  };
+  const closedRoster = { ...draftRoster, status: 'CLOSED' };
+
+  beforeEach(() => {
+    prisma = {
+      roster: {
+        findUnique: jest.fn().mockResolvedValue(draftRoster),
+        update: jest.fn().mockResolvedValue({}),
+      },
+      scheduleEntry: { findMany: jest.fn().mockResolvedValue([]) },
+      dailyStaffingRule: { findMany: jest.fn().mockResolvedValue([]) },
+      validationResult: {
+        deleteMany: jest.fn().mockResolvedValue({}),
+        createMany: jest.fn().mockResolvedValue({}),
+      },
+      $transaction: jest.fn((cb: (tx: CloseTxPrismaMock) => Promise<unknown>) =>
+        cb(prisma as unknown as CloseTxPrismaMock),
+      ),
+    };
+    service = new RosterStateService(prisma as unknown as PrismaService);
+  });
+
+  it('DIRECTOR/OFFICE_MANAGER가 아니면 마감을 거부한다(403)', async () => {
+    await expect(
+      service.close(
+        '100',
+        facilityId,
+        '9',
+        'SOCIAL_WORKER' as JobRole,
+        false,
+        undefined,
+      ),
+    ).rejects.toThrow(ForbiddenException);
+    expect(prisma.roster.update).not.toHaveBeenCalled();
+  });
+
+  it('DIRECTOR는 위반 없는 DRAFT 근무표를 마감할 수 있다', async () => {
+    const result = await service.close(
+      '100',
+      facilityId,
+      '9',
+      'DIRECTOR' as JobRole,
+      false,
+      undefined,
+    );
+
+    expect(result.status).toBe('CLOSED');
+    expect(prisma.roster.update).toHaveBeenCalledWith({
+      where: { id: 100n },
+      data: {
+        status: 'CLOSED',
+        closedBy: 9n,
+        closedAt: expect.any(Date) as Date,
+        forceClosed: false,
+        forceCloseReason: null,
+      },
+    });
+  });
+
+  it('DRAFT가 아닌(CLOSED) 근무표는 마감할 수 없다', async () => {
+    prisma.roster.findUnique.mockResolvedValue(closedRoster);
+
+    await expect(
+      service.close(
+        '100',
+        facilityId,
+        '9',
+        'OFFICE_MANAGER' as JobRole,
+        false,
+        undefined,
+      ),
+    ).rejects.toThrow(ConflictException);
+  });
+
+  it('DIRECTOR/OFFICE_MANAGER가 아니면 마감취소도 거부한다(403)', async () => {
+    prisma.roster.findUnique.mockResolvedValue(closedRoster);
+
+    await expect(
+      service.reopen('100', facilityId, 'SOCIAL_WORKER' as JobRole),
+    ).rejects.toThrow(ForbiddenException);
+    expect(prisma.roster.update).not.toHaveBeenCalled();
+  });
+
+  it('OFFICE_MANAGER는 마감취소로 DRAFT 복귀 + 마감 이력을 초기화한다', async () => {
+    prisma.roster.findUnique.mockResolvedValue(closedRoster);
+
+    const result = await service.reopen(
+      '100',
+      facilityId,
+      'OFFICE_MANAGER' as JobRole,
+    );
+
+    expect(result.status).toBe('DRAFT');
+    expect(prisma.roster.update).toHaveBeenCalledWith({
+      where: { id: 100n },
+      data: {
+        status: 'DRAFT',
+        closedBy: null,
+        closedAt: null,
+        forceClosed: false,
+        forceCloseReason: null,
+      },
+    });
+  });
+
+  it('CLOSED가 아닌(DRAFT) 근무표는 마감취소할 수 없다', async () => {
+    await expect(
+      service.reopen('100', facilityId, 'DIRECTOR' as JobRole),
+    ).rejects.toThrow(ConflictException);
   });
 });

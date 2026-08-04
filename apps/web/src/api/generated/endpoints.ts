@@ -40,7 +40,6 @@ import type {
   LoginRequestDto,
   MyLeaveRequestDto,
   RegisterDeviceDto,
-  RejectCloseDto,
   RejectRequestDto,
   RequestDetailDto,
   RequestListResponseDto,
@@ -2085,160 +2084,6 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       return useMutation(getApplyPresetMutationOptions(options), queryClient);
     }
 
-export type completeResponse200 = {
-  data: RosterTransitionResultDto
-  status: 200
-}
-
-export type completeResponseSuccess = (completeResponse200) & {
-  headers: Headers;
-};
-;
-
-export type completeResponse = (completeResponseSuccess)
-
-export const getCompleteUrl = (id: string,) => {
-
-
-
-
-  return `/api/rosters/${id}/complete`
-}
-
-export const complete = async (id: string, options?: RequestInit): Promise<completeResponse> => {
-
-  return customFetch<completeResponse>(getCompleteUrl(id),
-  {
-    ...options,
-    method: 'POST'
-
-
-  }
-);}
-
-
-
-
-
-export const getCompleteMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof complete>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof complete>>, TError,{id: string}, TContext> => {
-
-const mutationKey = ['complete'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof complete>>, {id: string}> = (props) => {
-          const {id} = props ?? {};
-
-          return  complete(id,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type CompleteMutationResult = NonNullable<Awaited<ReturnType<typeof complete>>>
-
-    export type CompleteMutationError = unknown
-
-    export const useComplete = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof complete>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof complete>>,
-        TError,
-        {id: string},
-        TContext
-      > => {
-      return useMutation(getCompleteMutationOptions(options), queryClient);
-    }
-
-export type submitCloseResponse200 = {
-  data: RosterTransitionResultDto
-  status: 200
-}
-
-export type submitCloseResponseSuccess = (submitCloseResponse200) & {
-  headers: Headers;
-};
-;
-
-export type submitCloseResponse = (submitCloseResponseSuccess)
-
-export const getSubmitCloseUrl = (id: string,) => {
-
-
-
-
-  return `/api/rosters/${id}/submit-close`
-}
-
-export const submitClose = async (id: string, options?: RequestInit): Promise<submitCloseResponse> => {
-
-  return customFetch<submitCloseResponse>(getSubmitCloseUrl(id),
-  {
-    ...options,
-    method: 'POST'
-
-
-  }
-);}
-
-
-
-
-
-export const getSubmitCloseMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof submitClose>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof submitClose>>, TError,{id: string}, TContext> => {
-
-const mutationKey = ['submitClose'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof submitClose>>, {id: string}> = (props) => {
-          const {id} = props ?? {};
-
-          return  submitClose(id,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type SubmitCloseMutationResult = NonNullable<Awaited<ReturnType<typeof submitClose>>>
-
-    export type SubmitCloseMutationError = unknown
-
-    export const useSubmitClose = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof submitClose>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof submitClose>>,
-        TError,
-        {id: string},
-        TContext
-      > => {
-      return useMutation(getSubmitCloseMutationOptions(options), queryClient);
-    }
-
 export type closeResponse200 = {
   data: RosterTransitionResultDto
   status: 200
@@ -2317,35 +2162,34 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       return useMutation(getCloseMutationOptions(options), queryClient);
     }
 
-export type rejectCloseResponse200 = {
+export type reopenResponse200 = {
   data: RosterTransitionResultDto
   status: 200
 }
 
-export type rejectCloseResponseSuccess = (rejectCloseResponse200) & {
+export type reopenResponseSuccess = (reopenResponse200) & {
   headers: Headers;
 };
 ;
 
-export type rejectCloseResponse = (rejectCloseResponseSuccess)
+export type reopenResponse = (reopenResponseSuccess)
 
-export const getRejectCloseUrl = (id: string,) => {
-
-
+export const getReopenUrl = (id: string,) => {
 
 
-  return `/api/rosters/${id}/reject-close`
+
+
+  return `/api/rosters/${id}/reopen`
 }
 
-export const rejectClose = async (id: string,
-    rejectCloseDto: RejectCloseDto, options?: RequestInit): Promise<rejectCloseResponse> => {
+export const reopen = async (id: string, options?: RequestInit): Promise<reopenResponse> => {
 
-  return customFetch<rejectCloseResponse>(getRejectCloseUrl(id),
+  return customFetch<reopenResponse>(getReopenUrl(id),
   {
     ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(rejectCloseDto)
+    method: 'POST'
+
+
   }
 );}
 
@@ -2353,11 +2197,11 @@ export const rejectClose = async (id: string,
 
 
 
-export const getRejectCloseMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof rejectClose>>, TError,{id: string;data: RejectCloseDto}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof rejectClose>>, TError,{id: string;data: RejectCloseDto}, TContext> => {
+export const getReopenMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reopen>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof reopen>>, TError,{id: string}, TContext> => {
 
-const mutationKey = ['rejectClose'];
+const mutationKey = ['reopen'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -2367,10 +2211,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof rejectClose>>, {id: string;data: RejectCloseDto}> = (props) => {
-          const {id,data} = props ?? {};
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof reopen>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
 
-          return  rejectClose(id,data,requestOptions)
+          return  reopen(id,requestOptions)
         }
 
 
@@ -2380,17 +2224,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type RejectCloseMutationResult = NonNullable<Awaited<ReturnType<typeof rejectClose>>>
-    export type RejectCloseMutationBody = RejectCloseDto
-    export type RejectCloseMutationError = unknown
+    export type ReopenMutationResult = NonNullable<Awaited<ReturnType<typeof reopen>>>
 
-    export const useRejectClose = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof rejectClose>>, TError,{id: string;data: RejectCloseDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+    export type ReopenMutationError = unknown
+
+    export const useReopen = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reopen>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof rejectClose>>,
+        Awaited<ReturnType<typeof reopen>>,
         TError,
-        {id: string;data: RejectCloseDto},
+        {id: string},
         TContext
       > => {
-      return useMutation(getRejectCloseMutationOptions(options), queryClient);
+      return useMutation(getReopenMutationOptions(options), queryClient);
     }

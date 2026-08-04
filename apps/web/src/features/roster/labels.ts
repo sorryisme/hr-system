@@ -97,8 +97,6 @@ export const STAFFING_CATEGORY_LABELS: Record<MonthlyStaffingItemDtoCategory, st
 
 export const ROSTER_STATUS_LABELS: Record<RosterStatus, string> = {
   DRAFT: '작성 중',
-  COMPLETED: '작성 완료',
-  CLOSING_APPROVAL: '마감 상신',
   CLOSED: '마감 완료',
 }
 
