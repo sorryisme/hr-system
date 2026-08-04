@@ -6,6 +6,8 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
 } from '@/components/ui/context-menu'
+import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
 import { JOB_ROLE_LABELS } from '@/features/approvals/labels'
 import { cn } from '@/lib/utils'
 import { ApplyPresetDialog, type PresetTarget } from './apply-preset-dialog'
@@ -42,6 +44,8 @@ interface DayMeta {
 }
 
 const LEAD_DAYS = 7
+/** 하단 요약행 1개 높이(px) — 요약행 고정 시 위 행이 아래 행 위에 겹쳐 쌓이도록 bottom 오프셋 계산에 사용 */
+const SUMMARY_ROW_HEIGHT = 38
 
 function pad2(n: number): string {
   return String(n).padStart(2, '0')
@@ -53,6 +57,12 @@ export function ScheduleGrid({ roster, prevRoster, highlight }: Props) {
   const [presetTarget, setPresetTarget] = useState<PresetTarget | null>(null)
   // 편집 가능 상태(§4.8)에서만 프리셋 적용·셀 편집 허용 — CLOSED/CLOSING_APPROVAL은 결재 경유·상신 취소 후에만
   const canEdit = roster.status === 'DRAFT' || roster.status === 'COMPLETED'
+  // 날짜 헤더 행 고정(freeze pane) 토글 — 끄면 표 전체가 함께 스크롤된다.
+  const [lockHeaders, setLockHeaders] = useState(true)
+  // 직원명 컬럼 고정 토글 — 날짜 헤더 고정과 독립적으로 켜고 끌 수 있다.
+  const [lockEmployees, setLockEmployees] = useState(true)
+  // 하단 요약행(근무 인원/요양보호사 주·야간) 고정 토글 — 다른 고정 토글과 독립적으로 켜고 끌 수 있다.
+  const [lockSummary, setLockSummary] = useState(true)
 
   // 전월 마지막 LEAD_DAYS일 — 실제 전월 근무표 조회 성공 여부와 무관하게 날짜 계산은 항상 가능.
   // 데이터(셀·요약)는 있으면 채우고 없으면 빈 칸으로 둔다.
@@ -186,93 +196,154 @@ export function ScheduleGrid({ roster, prevRoster, highlight }: Props) {
   }, [roster.summary, prevRoster])
 
   const headCellClass = 'w-[34px] min-w-[34px] px-0 py-1.5 text-center'
-  const stickyNameClass =
-    'sticky left-0 z-[2] min-w-[124px] bg-card px-3 text-left shadow-[1px_0_0_var(--border)]'
+  const stickyNameClass = cn(
+    'min-w-[124px] bg-card px-3 text-left shadow-[1px_0_0_var(--border)]',
+    lockEmployees && 'sticky left-0 z-[2]',
+  )
 
   return (
-    <div className="min-h-0 flex-1 overflow-auto rounded-2xl border border-border bg-card">
-      <table className="w-max border-separate border-spacing-0 text-[13px]">
-        <thead>
-          <tr>
-            <th className={cn(headCellClass, stickyNameClass, 'z-[4] bg-paper')}>
-              <span className="text-[13px] font-semibold text-muted-foreground">직원 / 날짜</span>
-            </th>
-            {days.map((d, i) => (
+    <div className="flex min-h-0 flex-1 flex-col gap-2">
+      <div className="flex items-center justify-end gap-4">
+        <div className="flex items-center gap-2">
+          <Label htmlFor="lock-headers-toggle" className="text-[13px] text-muted-foreground">
+            날짜 헤더 고정
+          </Label>
+          <Switch
+            id="lock-headers-toggle"
+            size="sm"
+            checked={lockHeaders}
+            onCheckedChange={setLockHeaders}
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <Label htmlFor="lock-employees-toggle" className="text-[13px] text-muted-foreground">
+            직원 헤더 고정
+          </Label>
+          <Switch
+            id="lock-employees-toggle"
+            size="sm"
+            checked={lockEmployees}
+            onCheckedChange={setLockEmployees}
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <Label htmlFor="lock-summary-toggle" className="text-[13px] text-muted-foreground">
+            하단 요약 고정
+          </Label>
+          <Switch
+            id="lock-summary-toggle"
+            size="sm"
+            checked={lockSummary}
+            onCheckedChange={setLockSummary}
+          />
+        </div>
+      </div>
+      <div className="min-h-0 flex-1 overflow-auto rounded-2xl border border-border bg-card">
+        <table className="w-max border-separate border-spacing-0 text-[13px]">
+          <thead>
+            <tr>
               <th
-                key={d.workDate}
                 className={cn(
                   headCellClass,
-                  'sticky top-0 z-[3] border-b border-border/60 bg-paper font-bold',
-                  d.readOnly && 'bg-muted/40',
-                  d.readOnly && i === LEAD_DAYS - 1 && 'border-r-2 border-r-border',
+                  stickyNameClass,
+                  'bg-paper',
+                  lockHeaders && 'sticky top-0',
+                  lockHeaders && lockEmployees && 'z-[4]',
+                  lockHeaders && !lockEmployees && 'z-[3]',
                 )}
               >
-                <div
-                  className={cn(
-                    'text-[13px] font-extrabold text-foreground',
-                    d.readOnly && 'font-semibold text-muted-foreground',
-                    !d.readOnly && d.dow === 0 && 'text-reject',
-                    !d.readOnly && d.dow === 6 && 'text-shift-night',
-                  )}
-                >
-                  {d.day}
-                </div>
-                <div
-                  className={cn(
-                    'text-[10px] font-semibold text-muted-foreground',
-                    !d.readOnly && d.dow === 0 && 'text-reject',
-                    !d.readOnly && d.dow === 6 && 'text-shift-night',
-                  )}
-                >
-                  {DOW_KR[d.dow]}
-                </div>
+                <span className="text-[13px] font-semibold text-muted-foreground">
+                  직원 / 날짜
+                </span>
               </th>
+              {days.map((d, i) => (
+                <th
+                  key={d.workDate}
+                  className={cn(
+                    headCellClass,
+                    'border-b border-border/60 bg-paper font-bold',
+                    lockHeaders && 'sticky top-0 z-[3]',
+                    d.readOnly && (lockHeaders ? 'bg-muted' : 'bg-muted/40'),
+                    d.readOnly && i === LEAD_DAYS - 1 && 'border-r-2 border-r-border',
+                  )}
+                >
+                  <div
+                    className={cn(
+                      'text-[13px] font-extrabold text-foreground',
+                      d.readOnly && 'font-semibold text-muted-foreground',
+                      !d.readOnly && d.dow === 0 && 'text-reject',
+                      !d.readOnly && d.dow === 6 && 'text-shift-night',
+                    )}
+                  >
+                    {d.day}
+                  </div>
+                  <div
+                    className={cn(
+                      'text-[10px] font-semibold text-muted-foreground',
+                      !d.readOnly && d.dow === 0 && 'text-reject',
+                      !d.readOnly && d.dow === 6 && 'text-shift-night',
+                    )}
+                  >
+                    {DOW_KR[d.dow]}
+                  </div>
+                </th>
+              ))}
+            </tr>
+          </thead>
+
+          <tbody>
+            {roster.teams.map((team) => (
+              <TeamGroup
+                key={team.teamId ?? 'none'}
+                team={team}
+                days={days}
+                cellMap={cellMap}
+                highlight={highlight}
+                stickyNameClass={stickyNameClass}
+                lockEmployees={lockEmployees}
+                canEdit={canEdit}
+                onApplyPreset={setPresetTarget}
+                rowIndexMap={rowIndexMap}
+                selectedKeys={selectedKeys}
+                onCellMouseDown={handleCellMouseDown}
+                onCellMouseEnter={handleCellMouseEnter}
+              />
             ))}
-          </tr>
-        </thead>
+          </tbody>
 
-        <tbody>
-          {roster.teams.map((team) => (
-            <TeamGroup
-              key={team.teamId ?? 'none'}
-              team={team}
+          <tfoot>
+            <SummaryRow
+              label="근무 인원"
               days={days}
-              cellMap={cellMap}
-              highlight={highlight}
               stickyNameClass={stickyNameClass}
-              canEdit={canEdit}
-              onApplyPreset={setPresetTarget}
-              rowIndexMap={rowIndexMap}
-              selectedKeys={selectedKeys}
-              onCellMouseDown={handleCellMouseDown}
-              onCellMouseEnter={handleCellMouseEnter}
+              lockEmployees={lockEmployees}
+              value={(d) => summaryMap.get(d.workDate)?.workingCount ?? 0}
+              lockSummary={lockSummary}
+              bottomPx={SUMMARY_ROW_HEIGHT * 2}
             />
-          ))}
-        </tbody>
-
-        <tfoot>
-          <SummaryRow
-            label="근무 인원"
-            days={days}
-            stickyNameClass={stickyNameClass}
-            value={(d) => summaryMap.get(d.workDate)?.workingCount ?? 0}
-          />
-          <SummaryRow
-            label="요양보호사 · 주간"
-            days={days}
-            stickyNameClass={stickyNameClass}
-            value={(d) => summaryMap.get(d.workDate)?.caregiverDay ?? 0}
-            short={(d) => summaryMap.get(d.workDate)?.dayShortage ?? false}
-          />
-          <SummaryRow
-            label="요양보호사 · 야간"
-            days={days}
-            stickyNameClass={stickyNameClass}
-            value={(d) => summaryMap.get(d.workDate)?.caregiverNight ?? 0}
-            short={(d) => summaryMap.get(d.workDate)?.nightShortage ?? false}
-          />
-        </tfoot>
-      </table>
+            <SummaryRow
+              label="요양보호사 · 주간"
+              days={days}
+              stickyNameClass={stickyNameClass}
+              lockEmployees={lockEmployees}
+              value={(d) => summaryMap.get(d.workDate)?.caregiverDay ?? 0}
+              short={(d) => summaryMap.get(d.workDate)?.dayShortage ?? false}
+              lockSummary={lockSummary}
+              bottomPx={SUMMARY_ROW_HEIGHT}
+            />
+            <SummaryRow
+              label="요양보호사 · 야간"
+              days={days}
+              stickyNameClass={stickyNameClass}
+              lockEmployees={lockEmployees}
+              value={(d) => summaryMap.get(d.workDate)?.caregiverNight ?? 0}
+              short={(d) => summaryMap.get(d.workDate)?.nightShortage ?? false}
+              lockSummary={lockSummary}
+              bottomPx={0}
+            />
+          </tfoot>
+        </table>
+      </div>
 
       <ApplyPresetDialog
         rosterId={roster.id}
@@ -298,6 +369,7 @@ function TeamGroup({
   cellMap,
   highlight,
   stickyNameClass,
+  lockEmployees,
   canEdit,
   onApplyPreset,
   rowIndexMap,
@@ -310,6 +382,8 @@ function TeamGroup({
   cellMap: Map<string, RosterCellDto>
   highlight?: CellHighlight | null
   stickyNameClass: string
+  /** 직원명 컬럼 고정 여부 — 켜지면 아래 스크롤 시 뒷내용이 비치지 않도록 강조색을 불투명하게 표시 */
+  lockEmployees: boolean
   canEdit: boolean
   onApplyPreset: (target: PresetTarget) => void
   rowIndexMap: Map<string, number>
@@ -331,6 +405,8 @@ function TeamGroup({
       </tr>
       {team.employees.map((emp) => {
         const rowHighlighted = highlight?.employeeId === emp.id
+        // 직원명 컬럼이 고정된 상태에서는 반투명 강조색 뒤로 스크롤 내용이 비치므로 불투명 색상으로 대체
+        const highlightOpaque = rowHighlighted && lockEmployees
         const row = rowIndexMap.get(emp.id) ?? -1
         return (
           <tr key={emp.id}>
@@ -338,14 +414,27 @@ function TeamGroup({
               className={cn(
                 stickyNameClass,
                 'border-b border-border/50 py-1',
-                rowHighlighted && 'bg-warning/10',
+                highlightOpaque && 'bg-warning',
+                rowHighlighted && !lockEmployees && 'bg-warning/10',
               )}
             >
               {canEdit ? (
                 <ContextMenu>
                   <ContextMenuTrigger className="block cursor-context-menu">
-                    <div className="text-sm font-bold text-foreground">{emp.name}</div>
-                    <div className="text-[11px] font-medium text-muted-foreground">
+                    <div
+                      className={cn(
+                        'text-sm font-bold',
+                        highlightOpaque ? 'text-warning-foreground' : 'text-foreground',
+                      )}
+                    >
+                      {emp.name}
+                    </div>
+                    <div
+                      className={cn(
+                        'text-[11px] font-medium',
+                        highlightOpaque ? 'text-warning-foreground' : 'text-muted-foreground',
+                      )}
+                    >
                       {JOB_ROLE_LABELS[emp.jobRole]}
                     </div>
                   </ContextMenuTrigger>
@@ -359,8 +448,20 @@ function TeamGroup({
                 </ContextMenu>
               ) : (
                 <>
-                  <div className="text-sm font-bold text-foreground">{emp.name}</div>
-                  <div className="text-[11px] font-medium text-muted-foreground">
+                  <div
+                    className={cn(
+                      'text-sm font-bold',
+                      highlightOpaque ? 'text-warning-foreground' : 'text-foreground',
+                    )}
+                  >
+                    {emp.name}
+                  </div>
+                  <div
+                    className={cn(
+                      'text-[11px] font-medium',
+                      highlightOpaque ? 'text-warning-foreground' : 'text-muted-foreground',
+                    )}
+                  >
                     {JOB_ROLE_LABELS[emp.jobRole]}
                   </div>
                 </>
@@ -468,22 +569,35 @@ function SummaryRow({
   label,
   days,
   stickyNameClass,
+  lockEmployees,
   value,
   short,
+  lockSummary,
+  bottomPx,
 }: {
   label: string
   days: DayMeta[]
   stickyNameClass: string
+  /** 직원명 컬럼 고정 여부 — 라벨 칸이 좌·하단에 동시에 고정될 때 z-index를 더 높여 겹침을 방지 */
+  lockEmployees: boolean
   value: (d: DayMeta) => number
   short?: (d: DayMeta) => boolean
+  /** 하단 요약행 고정 토글 — 켜지면 이 행이 스크롤 컨테이너 하단에 고정된다 */
+  lockSummary: boolean
+  /** 고정 시 다른 요약행과 겹치지 않도록 쌓는 bottom 오프셋(px) */
+  bottomPx: number
 }) {
   return (
     <tr>
       <td
         className={cn(
           stickyNameClass,
-          'z-[2] border-t border-border bg-paper text-[13px] font-bold text-muted-foreground',
+          'border-t border-border bg-paper text-[13px] font-bold text-muted-foreground',
+          lockSummary && 'sticky',
+          lockSummary && lockEmployees && 'z-[4]',
+          lockSummary && !lockEmployees && 'z-[3]',
         )}
+        style={lockSummary ? { bottom: bottomPx } : undefined}
       >
         {label}
       </td>
@@ -494,13 +608,14 @@ function SummaryRow({
             key={d.workDate}
             className={cn(
               'h-[38px] border-t border-r border-border/50 bg-paper text-center align-middle text-[13px] font-extrabold text-muted-foreground',
-              d.readOnly && 'bg-muted/40',
+              d.readOnly && (lockSummary ? 'bg-muted' : 'bg-muted/40'),
               d.readOnly && i === LEAD_DAYS - 1 && 'border-r-2 border-r-border',
-              isShort && 'bg-reject/10 text-reject',
+              isShort && (lockSummary ? 'bg-reject text-reject-foreground' : 'bg-reject/10 text-reject'),
+              lockSummary && 'sticky z-[3]',
             )}
+            style={lockSummary ? { bottom: bottomPx } : undefined}
           >
             {value(d)}
-            {isShort ? '!' : ''}
           </td>
         )
       })}
