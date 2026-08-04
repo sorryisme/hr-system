@@ -28,6 +28,8 @@ export interface CellHighlight {
 
 interface Props {
   roster: RosterResponseDto
+  /** 전월 근무표(있으면 앞부분에 전월 마지막 7일을 읽기 전용으로 함께 표기) */
+  prevRoster?: RosterResponseDto | null
   highlight?: CellHighlight | null
 }
 
@@ -35,27 +37,51 @@ interface DayMeta {
   day: number
   workDate: string
   dow: number
+  /** 전월 미리보기 컬럼 여부 — 편집 불가 */
+  readOnly: boolean
 }
+
+const LEAD_DAYS = 7
 
 function pad2(n: number): string {
   return String(n).padStart(2, '0')
 }
 
 /** 엑셀형 근무표: 직원(세로) × 날짜(가로). 팀 구분행 + 하단 요약/과부족행 포함 */
-export function ScheduleGrid({ roster, highlight }: Props) {
+export function ScheduleGrid({ roster, prevRoster, highlight }: Props) {
   const [year, month] = roster.yearMonth.split('-').map(Number)
   const [presetTarget, setPresetTarget] = useState<PresetTarget | null>(null)
   // 편집 가능 상태(§4.8)에서만 프리셋 적용·셀 편집 허용 — CLOSED/CLOSING_APPROVAL은 결재 경유·상신 취소 후에만
   const canEdit = roster.status === 'DRAFT' || roster.status === 'COMPLETED'
 
-  const days = useMemo<DayMeta[]>(() => {
+  // 전월 마지막 LEAD_DAYS일 — 실제 전월 근무표 조회 성공 여부와 무관하게 날짜 계산은 항상 가능.
+  // 데이터(셀·요약)는 있으면 채우고 없으면 빈 칸으로 둔다.
+  const leadDays = useMemo<DayMeta[]>(() => {
+    const monthStart = new Date(year, month - 1, 1)
+    const list: DayMeta[] = []
+    for (let i = LEAD_DAYS; i >= 1; i--) {
+      const dt = new Date(monthStart)
+      dt.setDate(dt.getDate() - i)
+      list.push({
+        day: dt.getDate(),
+        workDate: `${dt.getFullYear()}-${pad2(dt.getMonth() + 1)}-${pad2(dt.getDate())}`,
+        dow: dt.getDay(),
+        readOnly: true,
+      })
+    }
+    return list
+  }, [year, month])
+
+  const currentDays = useMemo<DayMeta[]>(() => {
     const list: DayMeta[] = []
     for (let d = 1; d <= roster.daysInMonth; d++) {
       const dow = new Date(year, month - 1, d).getDay()
-      list.push({ day: d, workDate: `${roster.yearMonth}-${pad2(d)}`, dow })
+      list.push({ day: d, workDate: `${roster.yearMonth}-${pad2(d)}`, dow, readOnly: false })
     }
     return list
   }, [roster.daysInMonth, roster.yearMonth, year, month])
+
+  const days = useMemo<DayMeta[]>(() => [...leadDays, ...currentDays], [leadDays, currentDays])
 
   // 셀 편집(§4.8): 셀 클릭 → 근무유형 팝오버, 드래그 → 사각 범위 일괄 선택.
   // 드래그 도중 재계산되는 사각형은 ref(진행 중 값) + state(렌더용 미리보기)로 나눠 둔다.
@@ -83,7 +109,7 @@ export function ScheduleGrid({ roster, highlight }: Props) {
         if (!emp) continue
         for (let c = c0; c <= c1; c++) {
           const d = days[c]
-          if (d) cells.push({ employeeId: emp.id, workDate: d.workDate })
+          if (d && !d.readOnly) cells.push({ employeeId: emp.id, workDate: d.workDate })
         }
       }
       if (cells.length > 0 && dragAnchorRef.current) {
@@ -129,7 +155,7 @@ export function ScheduleGrid({ roster, highlight }: Props) {
         if (!emp) continue
         for (let c = c0; c <= c1; c++) {
           const d = days[c]
-          if (d) set.add(`${emp.id}|${d.workDate}`)
+          if (d && !d.readOnly) set.add(`${emp.id}|${d.workDate}`)
         }
       }
     } else if (popover) {
@@ -144,18 +170,20 @@ export function ScheduleGrid({ roster, highlight }: Props) {
     return m
   }, [flatEmployees])
 
-  // (직원, 날짜) → 셀
+  // (직원, 날짜) → 셀. 전월 미리보기 칸은 prevRoster.cells로 채운다.
   const cellMap = useMemo(() => {
     const m = new Map<string, RosterCellDto>()
+    for (const c of prevRoster?.cells ?? []) m.set(`${c.employeeId}|${c.workDate}`, c)
     for (const c of roster.cells) m.set(`${c.employeeId}|${c.workDate}`, c)
     return m
-  }, [roster.cells])
+  }, [roster.cells, prevRoster])
 
   const summaryMap = useMemo(() => {
     const m = new Map<string, (typeof roster.summary)[number]>()
+    for (const s of prevRoster?.summary ?? []) m.set(s.workDate, s)
     for (const s of roster.summary) m.set(s.workDate, s)
     return m
-  }, [roster.summary])
+  }, [roster.summary, prevRoster])
 
   const headCellClass = 'w-[34px] min-w-[34px] px-0 py-1.5 text-center'
   const stickyNameClass =
@@ -169,19 +197,22 @@ export function ScheduleGrid({ roster, highlight }: Props) {
             <th className={cn(headCellClass, stickyNameClass, 'z-[4] bg-paper')}>
               <span className="text-[13px] font-semibold text-muted-foreground">직원 / 날짜</span>
             </th>
-            {days.map((d) => (
+            {days.map((d, i) => (
               <th
-                key={d.day}
+                key={d.workDate}
                 className={cn(
                   headCellClass,
                   'sticky top-0 z-[3] border-b border-border/60 bg-paper font-bold',
+                  d.readOnly && 'bg-muted/40',
+                  d.readOnly && i === LEAD_DAYS - 1 && 'border-r-2 border-r-border',
                 )}
               >
                 <div
                   className={cn(
                     'text-[13px] font-extrabold text-foreground',
-                    d.dow === 0 && 'text-reject',
-                    d.dow === 6 && 'text-shift-night',
+                    d.readOnly && 'font-semibold text-muted-foreground',
+                    !d.readOnly && d.dow === 0 && 'text-reject',
+                    !d.readOnly && d.dow === 6 && 'text-shift-night',
                   )}
                 >
                   {d.day}
@@ -189,8 +220,8 @@ export function ScheduleGrid({ roster, highlight }: Props) {
                 <div
                   className={cn(
                     'text-[10px] font-semibold text-muted-foreground',
-                    d.dow === 0 && 'text-reject',
-                    d.dow === 6 && 'text-shift-night',
+                    !d.readOnly && d.dow === 0 && 'text-reject',
+                    !d.readOnly && d.dow === 6 && 'text-shift-night',
                   )}
                 >
                   {DOW_KR[d.dow]}
@@ -339,11 +370,12 @@ function TeamGroup({
               const cell = cellMap.get(`${emp.id}|${d.workDate}`)
               const isHighlighted = rowHighlighted && highlight?.dates.has(d.workDate)
               const isSelected = selectedKeys.has(`${emp.id}|${d.workDate}`)
+              const editable = canEdit && !d.readOnly
               return (
                 <td
-                  key={d.day}
+                  key={d.workDate}
                   onMouseDown={
-                    canEdit
+                    editable
                       ? (e) => {
                           e.preventDefault()
                           onCellMouseDown(row, col, e.currentTarget)
@@ -351,17 +383,23 @@ function TeamGroup({
                       : undefined
                   }
                   onMouseEnter={
-                    canEdit ? (e) => onCellMouseEnter(row, col, e.currentTarget) : undefined
+                    editable ? (e) => onCellMouseEnter(row, col, e.currentTarget) : undefined
                   }
                   className={cn(
                     'h-[38px] border-b border-r border-border/50 text-center align-middle',
                     (d.dow === 0 || d.dow === 6) && 'bg-paper/50',
+                    d.readOnly && 'bg-muted/40',
+                    d.readOnly && col === LEAD_DAYS - 1 && 'border-r-2 border-r-border',
                     isHighlighted && 'bg-warning/15 ring-2 ring-inset ring-warning',
-                    canEdit && 'cursor-pointer select-none',
+                    editable && 'cursor-pointer select-none',
                     isSelected && 'bg-brand/15 ring-2 ring-inset ring-brand',
                   )}
                 >
-                  {cell && <CellChip cell={cell} />}
+                  {cell && (
+                    <span className={cn('inline-flex', d.readOnly && 'opacity-60')}>
+                      <CellChip cell={cell} />
+                    </span>
+                  )}
                 </td>
               )
             })}
@@ -449,13 +487,15 @@ function SummaryRow({
       >
         {label}
       </td>
-      {days.map((d) => {
+      {days.map((d, i) => {
         const isShort = short?.(d) ?? false
         return (
           <td
-            key={d.day}
+            key={d.workDate}
             className={cn(
               'h-[38px] border-t border-r border-border/50 bg-paper text-center align-middle text-[13px] font-extrabold text-muted-foreground',
+              d.readOnly && 'bg-muted/40',
+              d.readOnly && i === LEAD_DAYS - 1 && 'border-r-2 border-r-border',
               isShort && 'bg-reject/10 text-reject',
             )}
           >
