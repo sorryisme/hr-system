@@ -356,6 +356,38 @@
         ]
       }
     },
+    "/api/leave/roster-status": {
+      "get": {
+        "operationId": "getRosterStatus",
+        "parameters": [
+          {
+            "name": "yearMonth",
+            "required": false,
+            "in": "query",
+            "description": "YYYY-MM. 생략 시 당월",
+            "schema": {
+              "example": "2026-07",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RosterStatusDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "leave"
+        ]
+      }
+    },
     "/api/leave/requests": {
       "get": {
         "operationId": "getMyRequests",
@@ -1375,6 +1407,22 @@
           "balanceYear",
           "annual",
           "substituteHoliday"
+        ]
+      },
+      "RosterStatusDto": {
+        "type": "object",
+        "properties": {
+          "yearMonth": {
+            "type": "string",
+            "description": "YYYY-MM"
+          },
+          "exists": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "yearMonth",
+          "exists"
         ]
       },
       "MyLeaveRequestDto": {

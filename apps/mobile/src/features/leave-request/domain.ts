@@ -1,6 +1,28 @@
 import { STATUS_LABELS, TYPE_LABELS } from './labels'
 import type { LeaveRequest, LeaveRequestType } from './types'
 
+/** 신청 화면에서 이동 가능한 최대 월 offset(0=이번 달). 근무표는 통상 익월 초까지만 확정되므로
+ * 너무 먼 미래는 선택지에서 제외한다 — 실제 차단은 서버의 근무표 존재 여부 검증이 한다. */
+export const MAX_MONTH_OFFSET = 2
+
+/** 마법사 시작(또는 월 이동) 시점의 기준 연/월. 이 값을 위저드 상태에 고정해 두고 이후
+ * addMonthOffset()으로만 파생시켜야, 날짜 선택 화면 렌더와 제출 시점에 각각 `new Date()`를
+ * 다시 호출하다 자정을 넘겨 서로 다른 달을 계산하는 것을 막을 수 있다. */
+export function currentYearMonth(now: Date = new Date()): { year: number; month: number } {
+  return { year: now.getFullYear(), month: now.getMonth() + 1 }
+}
+
+/** baseYear/baseMonth에서 offset개월 이동한 연/월(순수 계산, 현재 시각을 다시 읽지 않는다).
+ * 12월 + n처럼 연도가 넘어가는 경우도 처리 */
+export function addMonthOffset(
+  baseYear: number,
+  baseMonth: number,
+  offset: number,
+): { year: number; month: number } {
+  const d = new Date(baseYear, baseMonth - 1 + offset, 1)
+  return { year: d.getFullYear(), month: d.getMonth() + 1 }
+}
+
 /** 유형별 연차 차감량. 휴일대체는 연차가 아니라 유대 잔여에서 1건 차감(D-15) */
 export function deductAmount(type: LeaveRequestType, dayCount: number): number {
   if (type === 'ANNUAL') return dayCount
@@ -90,13 +112,14 @@ function fmtDays(v: number): string {
   return `${v}일`
 }
 
-/** [21,22] → "7월 21~22일", [3,10] → "7월 3, 10일" */
-export function rangeText(days: number[], month: number): string {
+/** [21,22] → "2026년 7월 21~22일", [3,10] → "2026년 7월 3, 10일" */
+export function rangeText(days: number[], year: number, month: number): string {
   const s = [...days].sort((a, b) => a - b)
   if (s.length === 0) return ''
-  if (s.length === 1) return `${month}월 ${s[0]}일`
+  const prefix = `${year}년 ${month}월`
+  if (s.length === 1) return `${prefix} ${s[0]}일`
   const contiguous = s.every((v, i) => i === 0 || v === s[i - 1] + 1)
-  return contiguous ? `${month}월 ${s[0]}~${s[s.length - 1]}일` : `${month}월 ${s.join(', ')}일`
+  return contiguous ? `${prefix} ${s[0]}~${s[s.length - 1]}일` : `${prefix} ${s.join(', ')}일`
 }
 
 /** 신청 유형+수량 표기(예: "연차 2일") */

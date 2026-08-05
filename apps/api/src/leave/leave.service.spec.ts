@@ -6,7 +6,7 @@ import {
 } from '@prisma/client';
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { CreateLeaveRequestDto } from './dto/create-leave-request.dto';
-import { LeaveService } from './leave.service';
+import { currentYearMonthKst, LeaveService } from './leave.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 type TxMock = {
@@ -22,12 +22,14 @@ type TxMock = {
   leaveBalance: { upsert: jest.Mock; update: jest.Mock };
   substituteHolidayBalance: { upsert: jest.Mock; update: jest.Mock };
   approvalHistory: { create: jest.Mock };
+  roster: { findMany: jest.Mock };
 };
 
 type PrismaMock = {
   leaveBalance: { findUnique: jest.Mock };
   substituteHolidayBalance: { findUnique: jest.Mock };
   approvalRequest: { findMany: jest.Mock; findUnique: jest.Mock };
+  roster: { findUnique: jest.Mock };
   $transaction: jest.Mock;
 };
 
@@ -45,6 +47,9 @@ function makeTxMock(): TxMock {
     leaveBalance: { upsert: jest.fn(), update: jest.fn() },
     substituteHolidayBalance: { upsert: jest.fn(), update: jest.fn() },
     approvalHistory: { create: jest.fn() },
+    // 기본값: 신청 대상 월(2026-07) 근무표가 이미 생성되어 있다고 가정 — 미생성 케이스는
+    // 개별 테스트에서 mockResolvedValueOnce([])로 덮어쓴다.
+    roster: { findMany: jest.fn().mockResolvedValue([{ yearMonth: '2026-07' }]) },
   };
 }
 
@@ -53,6 +58,7 @@ function makePrismaMock(tx: TxMock): PrismaMock {
     leaveBalance: { findUnique: jest.fn() },
     substituteHolidayBalance: { findUnique: jest.fn() },
     approvalRequest: { findMany: jest.fn(), findUnique: jest.fn() },
+    roster: { findUnique: jest.fn() },
     $transaction: jest.fn((cb: (tx: TxMock) => unknown) => cb(tx)),
   };
 }
@@ -182,6 +188,38 @@ describe('LeaveService', () => {
       const result = await service.getMyRequests(4n);
 
       expect(result[0].pendingCancellation).toBe(true);
+    });
+  });
+
+  describe('getRosterStatus', () => {
+    it('yearMonth를 생략하면 서버 기준(KST) 당월을 조회한다', async () => {
+      prisma.roster.findUnique.mockResolvedValue({ id: 1n });
+      const thisMonth = currentYearMonthKst();
+
+      const result = await service.getRosterStatus(1n);
+
+      expect(prisma.roster.findUnique).toHaveBeenCalledWith({
+        where: { facilityId_yearMonth: { facilityId: 1n, yearMonth: thisMonth } },
+        select: { id: true },
+      });
+      expect(result).toEqual({ yearMonth: thisMonth, exists: true });
+    });
+
+    it('당월 판단은 UTC가 아니라 KST 기준이다(UTC 7/31 15:30 = KST 8/1 00:30)', () => {
+      expect(currentYearMonthKst(new Date('2026-07-31T15:30:00.000Z'))).toBe('2026-08');
+      expect(currentYearMonthKst(new Date('2026-07-31T14:59:00.000Z'))).toBe('2026-07');
+    });
+
+    it('yearMonth를 지정하면 해당 월을 조회하고, 근무표가 없으면 exists: false', async () => {
+      prisma.roster.findUnique.mockResolvedValue(null);
+
+      const result = await service.getRosterStatus(1n, '2026-09');
+
+      expect(prisma.roster.findUnique).toHaveBeenCalledWith({
+        where: { facilityId_yearMonth: { facilityId: 1n, yearMonth: '2026-09' } },
+        select: { id: true },
+      });
+      expect(result).toEqual({ yearMonth: '2026-09', exists: false });
     });
   });
 
@@ -328,6 +366,25 @@ describe('LeaveService', () => {
       tx.approvalRequestDate.findFirst.mockResolvedValue({ requestId: 1n, targetDate: new Date('2026-07-21') });
 
       await expect(service.submitRequest(4n, 1n, dto)).rejects.toThrow(ConflictException);
+    });
+
+    it('대상 월의 근무표가 생성되어 있지 않으면 거부한다', async () => {
+      tx.roster.findMany.mockResolvedValueOnce([]);
+
+      await expect(service.submitRequest(4n, 1n, dto)).rejects.toThrow(NotFoundException);
+      expect(tx.approvalRequestDate.findFirst).not.toHaveBeenCalled();
+      expect(tx.approvalRequest.create).not.toHaveBeenCalled();
+    });
+
+    it('연차가 두 달에 걸치는데 그중 한 달만 근무표가 있으면 거부한다', async () => {
+      tx.roster.findMany.mockResolvedValueOnce([{ yearMonth: '2026-07' }]); // 8월분 누락
+
+      await expect(
+        service.submitRequest(4n, 1n, {
+          type: ApprovalRequestType.ANNUAL,
+          targetDates: ['2026-07-31', '2026-08-01'],
+        }),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 

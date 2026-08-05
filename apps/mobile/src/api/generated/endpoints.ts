@@ -29,10 +29,12 @@ import type {
   ClockTagRequestDto,
   ClockTagResponseDto,
   CreateLeaveRequestDto,
+  GetRosterStatusParams,
   LeaveBalanceResponseDto,
   LoginRequestDto,
   MyLeaveRequestDto,
   RegisterDeviceDto,
+  RosterStatusDto,
   SessionUserDto
 } from './model';
 
@@ -750,6 +752,120 @@ export function useGetBalance<TData = Awaited<ReturnType<typeof getBalance>>, TE
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
   const queryOptions = getGetBalanceQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export type getRosterStatusResponse200 = {
+  data: RosterStatusDto
+  status: 200
+}
+
+export type getRosterStatusResponseSuccess = (getRosterStatusResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getRosterStatusResponse = (getRosterStatusResponseSuccess)
+
+export const getGetRosterStatusUrl = (params?: GetRosterStatusParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/leave/roster-status?${stringifiedParams}` : `/api/leave/roster-status`
+}
+
+export const getRosterStatus = async (params?: GetRosterStatusParams, options?: RequestInit): Promise<getRosterStatusResponse> => {
+
+  return customFetch<getRosterStatusResponse>(getGetRosterStatusUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetRosterStatusQueryKey = (params?: GetRosterStatusParams,) => {
+    return [
+    `/api/leave/roster-status`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetRosterStatusQueryOptions = <TData = Awaited<ReturnType<typeof getRosterStatus>>, TError = unknown>(params?: GetRosterStatusParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRosterStatus>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetRosterStatusQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getRosterStatus>>> = ({ signal }) => getRosterStatus(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getRosterStatus>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetRosterStatusQueryResult = NonNullable<Awaited<ReturnType<typeof getRosterStatus>>>
+export type GetRosterStatusQueryError = unknown
+
+
+export function useGetRosterStatus<TData = Awaited<ReturnType<typeof getRosterStatus>>, TError = unknown>(
+ params: undefined |  GetRosterStatusParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRosterStatus>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getRosterStatus>>,
+          TError,
+          Awaited<ReturnType<typeof getRosterStatus>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetRosterStatus<TData = Awaited<ReturnType<typeof getRosterStatus>>, TError = unknown>(
+ params?: GetRosterStatusParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRosterStatus>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getRosterStatus>>,
+          TError,
+          Awaited<ReturnType<typeof getRosterStatus>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetRosterStatus<TData = Awaited<ReturnType<typeof getRosterStatus>>, TError = unknown>(
+ params?: GetRosterStatusParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRosterStatus>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetRosterStatus<TData = Awaited<ReturnType<typeof getRosterStatus>>, TError = unknown>(
+ params?: GetRosterStatusParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRosterStatus>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetRosterStatusQueryOptions(params,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

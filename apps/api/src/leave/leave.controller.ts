@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, Post, Query } from '@nestjs/common';
 import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../auth/decorators';
 import { SessionUserDto } from '../auth/dto/session-user.dto';
@@ -7,6 +7,7 @@ import { CreateLeaveRequestDto } from './dto/create-leave-request.dto';
 import { LeaveBalanceResponseDto } from './dto/leave-balance.dto';
 import { LeaveService } from './leave.service';
 import { MyLeaveRequestDto } from './dto/my-leave-request.dto';
+import { RosterStatusDto, RosterStatusQueryDto } from './dto/roster-status.dto';
 
 // 본인 데이터 조회 전용(모바일 종사자 웹뷰). 결재자용 /requests(approvals:read/decide)와 달리
 // 별도 권한 없이 전역 JwtAuthGuard만으로 충분하다 — auth/me와 동일하게 @CurrentUser로
@@ -22,6 +23,19 @@ export class LeaveController {
     @CurrentUser() user: SessionUserDto,
   ): Promise<LeaveBalanceResponseDto> {
     return this.leaveService.getBalance(BigInt(user.id));
+  }
+
+  /// 근무표 미생성 월에는 신청 자체를 막기 위해 모바일 날짜 선택 화면에서 월 이동 시마다
+  /// 조회한다(roster:read 불요). yearMonth 생략 시 당월.
+  @Get('roster-status')
+  @ApiOkResponse({ type: RosterStatusDto })
+  getRosterStatus(
+    @Query() query: RosterStatusQueryDto,
+    @CurrentUser() user: SessionUserDto,
+  ): Promise<RosterStatusDto> {
+    return query.yearMonth
+      ? this.leaveService.getRosterStatus(BigInt(user.facilityId), query.yearMonth)
+      : this.leaveService.getRosterStatus(BigInt(user.facilityId));
   }
 
   @Get('requests')

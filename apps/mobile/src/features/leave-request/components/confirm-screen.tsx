@@ -9,6 +9,7 @@ import type { LeaveRequestType } from '../types'
 export function ConfirmScreen({
   type,
   selectedDays,
+  year,
   month,
   todayOfMonth,
   balance,
@@ -20,6 +21,7 @@ export function ConfirmScreen({
 }: {
   type: LeaveRequestType
   selectedDays: number[]
+  year: number
   month: number
   todayOfMonth: number
   balance: number
@@ -54,7 +56,7 @@ export function ConfirmScreen({
 
       <Card className="rounded-3xl border-2 border-border px-6 py-5">
         <p className="text-base font-bold text-muted-foreground">신청 내용</p>
-        <p className="mt-2 text-2xl font-black">{rangeText(selectedDays, month)}</p>
+        <p className="mt-2 text-2xl font-black">{rangeText(selectedDays, year, month)}</p>
         <div className="mt-3 flex flex-wrap gap-2">
           <span className="rounded-2xl bg-approve/15 px-4 py-2 text-lg font-bold text-approve">
             {TYPE_LABELS[type].name} {amountLabel(type, count)}

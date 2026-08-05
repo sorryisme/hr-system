@@ -8,11 +8,18 @@ import {
 } from '@/api/generated/endpoints'
 import { ApiError } from '@/api/mutator'
 import { generateUuid } from '@/lib/uuid'
-import { toIsoDate } from './domain'
+import { addMonthOffset, currentYearMonth, MAX_MONTH_OFFSET, toIsoDate } from './domain'
 import type { LeaveRequestType, Screen } from './types'
 
 interface State {
   screen: Screen
+  /** 위저드 시작(또는 마지막 월 이동) 시점에 고정한 기준 연/월. 이후 이동은 monthOffset만
+   * 바꾸고 이 값은 건드리지 않는다 — 화면 렌더와 제출이 각자 다른 시점의 `new Date()`를
+   * 읽어 자정 경계에서 서로 다른 달을 계산하는 걸 막기 위함(§P2 리뷰). */
+  baseYear: number
+  baseMonth: number
+  /** 날짜 선택 화면에서 보고 있는 달(0=기준 달 … MAX_MONTH_OFFSET=+2개월) */
+  monthOffset: number
   selectedDays: number[]
   selectedType: LeaveRequestType | null
   blockedMessage: string | null
@@ -20,13 +27,19 @@ interface State {
   cancelMessage: string | null
 }
 
-const initialState: State = {
-  screen: 'home',
-  selectedDays: [],
-  selectedType: null,
-  blockedMessage: null,
-  submitError: null,
-  cancelMessage: null,
+function initialState(): State {
+  const { year, month } = currentYearMonth()
+  return {
+    screen: 'home',
+    baseYear: year,
+    baseMonth: month,
+    monthOffset: 0,
+    selectedDays: [],
+    selectedType: null,
+    blockedMessage: null,
+    submitError: null,
+    cancelMessage: null,
+  }
 }
 
 /**
@@ -40,10 +53,15 @@ export function useLeaveRequest() {
   const submitMutation = useSubmitRequest()
   const cancelMutation = useCancelRequest()
 
+  /** 기준 연/월을 현재 시각으로 다시 고정한다 — 새 신청을 시작할 때만 호출(진행 중 월 이동과는 무관) */
   function resetWizard(screen: Screen) {
+    const { year, month } = currentYearMonth()
     setState((s) => ({
       ...s,
       screen,
+      baseYear: year,
+      baseMonth: month,
+      monthOffset: 0,
       selectedDays: [],
       selectedType: null,
       blockedMessage: null,
@@ -81,6 +99,23 @@ export function useLeaveRequest() {
     })
   }
 
+  /** 달 이동. 날짜 선택은 한 달 안에서만 하므로 이동 시 기존 선택은 초기화한다 */
+  function prevMonth() {
+    setState((s) =>
+      s.monthOffset > 0
+        ? { ...s, monthOffset: s.monthOffset - 1, selectedDays: [], blockedMessage: null }
+        : s,
+    )
+  }
+
+  function nextMonth() {
+    setState((s) =>
+      s.monthOffset < MAX_MONTH_OFFSET
+        ? { ...s, monthOffset: s.monthOffset + 1, selectedDays: [], blockedMessage: null }
+        : s,
+    )
+  }
+
   function showBlockedMessage(label: string) {
     setState((s) => ({ ...s, blockedMessage: label }))
   }
@@ -96,14 +131,16 @@ export function useLeaveRequest() {
     ])
   }
 
-  /** 신청 제출(POST /leave/requests) → 잔여·목록 재조회 → 완료 화면. 진동 피드백(N-6) */
+  /** 신청 제출(POST /leave/requests) → 잔여·목록 재조회 → 완료 화면. 진동 피드백(N-6).
+   * 연/월은 반드시 state.baseYear/baseMonth+monthOffset(위저드가 들고 있는 고정값)에서 파생한다 —
+   * 여기서 `new Date()`를 다시 읽으면 자정을 넘겨 제출할 때 화면에 보이던 달과 어긋날 수 있다. */
   async function submit() {
     if (!state.selectedType) return
     const type = state.selectedType
-    const now = new Date()
+    const { year, month } = addMonthOffset(state.baseYear, state.baseMonth, state.monthOffset)
     const targetDates = [...state.selectedDays]
       .sort((a, b) => a - b)
-      .map((day) => toIsoDate(now.getFullYear(), now.getMonth() + 1, day))
+      .map((day) => toIsoDate(year, month, day))
 
     try {
       await submitMutation.mutateAsync({
@@ -151,6 +188,8 @@ export function useLeaveRequest() {
       goStatus,
       step1Next,
       toggleDay,
+      prevMonth,
+      nextMonth,
       showBlockedMessage,
       pickType,
       submit,

@@ -13,9 +13,14 @@ export function DateSelectScreen({
   selectedDays,
   requests,
   blockedMessage,
+  rosterStatus,
+  canGoPrevMonth,
+  canGoNextMonth,
   onBack,
   onToggleDay,
   onBlockedDay,
+  onPrevMonth,
+  onNextMonth,
   onNext,
 }: {
   year: number
@@ -26,12 +31,19 @@ export function DateSelectScreen({
   selectedDays: number[]
   requests: LeaveRequest[]
   blockedMessage: string | null
+  /** 조회 중인 월의 근무표 상태. 'loading'/'unknown'(조회 실패)이면 아직 막지 않고 제출 시점 검증에 맡긴다 */
+  rosterStatus: 'exists' | 'missing' | 'loading' | 'unknown'
+  canGoPrevMonth: boolean
+  canGoNextMonth: boolean
   onBack: () => void
   onToggleDay: (day: number) => void
   onBlockedDay: (message: string) => void
+  onPrevMonth: () => void
+  onNextMonth: () => void
   onNext: () => void
 }) {
   const count = selectedDays.length
+  const rosterMissing = rosterStatus === 'missing'
 
   return (
     <div className="flex flex-1 flex-col gap-1 p-5">
@@ -59,11 +71,20 @@ export function DateSelectScreen({
         firstWeekday={firstWeekday}
         selectedDays={selectedDays}
         requests={requests}
+        monthDisabled={rosterMissing}
+        canGoPrevMonth={canGoPrevMonth}
+        canGoNextMonth={canGoNextMonth}
         onToggleDay={onToggleDay}
         onBlockedDay={onBlockedDay}
+        onPrevMonth={onPrevMonth}
+        onNextMonth={onNextMonth}
       />
 
-      {blockedMessage ? (
+      {rosterMissing ? (
+        <div className="mt-2.5 rounded-2xl bg-warning/10 px-4 py-3 text-center text-base font-bold text-warning">
+          이 달 근무표가 아직 준비되지 않아 신청할 수 없어요. 담당자에게 문의해 주세요.
+        </div>
+      ) : blockedMessage ? (
         <div className="mt-2.5 rounded-2xl bg-reject/10 px-4 py-3 text-center text-base font-bold text-reject">
           {blockedMessage}
         </div>
@@ -77,7 +98,7 @@ export function DateSelectScreen({
         </p>
         <Button
           onClick={onNext}
-          disabled={count === 0}
+          disabled={count === 0 || rosterMissing}
           className="h-auto w-full rounded-3xl bg-primary py-6 text-xl font-black text-primary-foreground shadow-lg hover:bg-primary/90"
         >
           다음
