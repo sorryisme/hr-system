@@ -16,3 +16,6 @@ apps/api/dist/
 apps/web/src/routeTree.gen.ts
 apps/mobile/src/routeTree.gen.ts
 .playwright-mcp
+
+# 로컬 실행 권한 설정(사용자별) — 광범위한 권한이 포함될 수 있어 커밋 대상에서 제외
+.claude/settings.local.json

@@ -22,6 +22,7 @@ import {
   LeaveBalanceResponseDto,
 } from './dto/leave-balance.dto';
 import { MyLeaveRequestDto } from './dto/my-leave-request.dto';
+import { RosterStatusDto } from './dto/roster-status.dto';
 
 const LEAVE_TYPES: ApprovalRequestType[] = [
   ApprovalRequestType.ANNUAL,
@@ -77,6 +78,19 @@ function startOfUtcDay(d: Date): Date {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
 }
 
+/// "당월"은 서버 프로세스 시간대(UTC)가 아니라 한국 시간 기준이어야 한다 — UTC로 계산하면
+/// KST 자정~오전 9시 사이(예: UTC 7/31 15:30 = KST 8/1 00:30)에 이전 달을 당월로 잘못 반환한다.
+export function currentYearMonthKst(now = new Date()): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Seoul',
+    year: 'numeric',
+    month: '2-digit',
+  }).formatToParts(now);
+  const year = parts.find((p) => p.type === 'year')!.value;
+  const month = parts.find((p) => p.type === 'month')!.value;
+  return `${year}-${month}`;
+}
+
 @Injectable()
 export class LeaveService {
   constructor(private readonly prisma: PrismaService) {}
@@ -101,6 +115,20 @@ export class LeaveService {
       annual: annual ? this.toDetail(annual) : { ...ZERO_DETAIL },
       substituteHoliday: substitute ? this.toDetail(substitute) : { ...ZERO_DETAIL },
     };
+  }
+
+  /// 조회 월(생략 시 당월) 근무표 생성 여부. 모바일 날짜 선택 화면에서 월을 이동할 때마다
+  /// 호출해 미생성 월은 신청을 막는 데 쓰인다(roster:read 권한이 필요한 GET /rosters와 달리
+  /// 종사자도 호출 가능해야 함).
+  async getRosterStatus(
+    facilityId: bigint,
+    yearMonth = currentYearMonthKst(),
+  ): Promise<RosterStatusDto> {
+    const roster = await this.prisma.roster.findUnique({
+      where: { facilityId_yearMonth: { facilityId, yearMonth } },
+      select: { id: true },
+    });
+    return { yearMonth, exists: roster !== null };
   }
 
   async getMyRequests(employeeId: bigint): Promise<MyLeaveRequestDto[]> {
@@ -167,6 +195,7 @@ export class LeaveService {
     const balanceYear = dateObjs[0].getUTCFullYear();
 
     return this.prisma.$transaction(async (tx) => {
+      await this.assertRosterExists(tx, facilityId, targetDates);
       await this.assertNoOverlap(tx, employeeId, dateObjs);
       const requestLines = await this.resolveRequestLines(tx, facilityId);
 
@@ -318,6 +347,28 @@ export class LeaveService {
       throw new ConflictException({
         code: 'IDEMPOTENCY_KEY_REUSE',
         message: '이미 다른 요청에 사용된 키입니다.',
+      });
+    }
+  }
+
+  /// 대상 날짜가 속한 월의 근무표가 모두 생성되어 있어야 신청 가능(근무표 미생성 월은 차단).
+  /// 연차는 여러 달에 걸칠 수 있어 targetDates에서 파생된 yearMonth 전부를 확인한다.
+  private async assertRosterExists(
+    tx: Prisma.TransactionClient,
+    facilityId: bigint,
+    targetDates: string[],
+  ): Promise<void> {
+    const yearMonths = [...new Set(targetDates.map((d) => d.slice(0, 7)))];
+    const rosters = await tx.roster.findMany({
+      where: { facilityId, yearMonth: { in: yearMonths } },
+      select: { yearMonth: true },
+    });
+    const existing = new Set(rosters.map((r) => r.yearMonth));
+    const missing = yearMonths.find((ym) => !existing.has(ym));
+    if (missing) {
+      throw new NotFoundException({
+        code: 'ROSTER_NOT_FOUND',
+        message: `${missing} 근무표가 아직 생성되지 않아 신청할 수 없어요.`,
       });
     }
   }

@@ -1,4 +1,4 @@
-import { useGetBalance, useGetMyRequests } from '@/api/generated/endpoints'
+import { useGetBalance, useGetMyRequests, useGetRosterStatus } from '@/api/generated/endpoints'
 import type { MyLeaveRequestDto } from '@/api/generated/model'
 import { getSessionUser } from '@/features/auth/session'
 import { ConfirmScreen } from './components/confirm-screen'
@@ -7,8 +7,13 @@ import { DoneScreen } from './components/done-screen'
 import { HomeScreen } from './components/home-screen'
 import { StatusScreen } from './components/status-screen'
 import { TypeSelectScreen } from './components/type-select-screen'
+import { addMonthOffset, MAX_MONTH_OFFSET } from './domain'
 import type { LeaveRequest, LeaveRequestStatus, LeaveRequestType } from './types'
 import { useLeaveRequest } from './use-leave-request'
+
+function toYearMonth(year: number, month: number): string {
+  return `${year}-${String(month).padStart(2, '0')}`
+}
 
 function toLeaveRequestStatus(status: MyLeaveRequestDto['status']): LeaveRequestStatus {
   if (status === 'APPROVED') return 'APPROVED'
@@ -78,11 +83,25 @@ function LeaveRequestScreens({
   const { state, submitting, cancelingId, actions } = useLeaveRequest()
 
   const now = new Date()
-  const year = now.getFullYear()
-  const month = now.getMonth() + 1 // 표시용 1-indexed
-  const todayOfMonth = now.getDate()
+  const { year, month } = addMonthOffset(state.baseYear, state.baseMonth, state.monthOffset)
+  const todayOfMonth = state.monthOffset === 0 ? now.getDate() : 0 // 기준 달을 보는 중이 아니면 "지난 날" 개념이 없음
   const daysInMonth = new Date(year, month, 0).getDate()
   const firstWeekday = new Date(year, month - 1, 1).getDay()
+
+  const rosterStatusQuery = useGetRosterStatus(
+    { yearMonth: toYearMonth(year, month) },
+    { query: { enabled: state.screen === 'step1' } },
+  )
+  const rosterStatus =
+    state.screen !== 'step1'
+      ? 'unknown'
+      : rosterStatusQuery.isPending
+        ? 'loading'
+        : rosterStatusQuery.isError
+          ? 'unknown' // 조회 실패 시 막지 않고 제출 시점 서버 검증에 맡긴다
+          : rosterStatusQuery.data.data.exists
+            ? 'exists'
+            : 'missing'
 
   switch (state.screen) {
     case 'home':
@@ -107,9 +126,14 @@ function LeaveRequestScreens({
           selectedDays={state.selectedDays}
           requests={requests}
           blockedMessage={state.blockedMessage}
+          rosterStatus={rosterStatus}
+          canGoPrevMonth={state.monthOffset > 0}
+          canGoNextMonth={state.monthOffset < MAX_MONTH_OFFSET}
           onBack={actions.goHome}
           onToggleDay={actions.toggleDay}
           onBlockedDay={actions.showBlockedMessage}
+          onPrevMonth={actions.prevMonth}
+          onNextMonth={actions.nextMonth}
           onNext={actions.step1Next}
         />
       )
@@ -129,6 +153,7 @@ function LeaveRequestScreens({
         <ConfirmScreen
           type={state.selectedType}
           selectedDays={state.selectedDays}
+          year={year}
           month={month}
           todayOfMonth={todayOfMonth}
           balance={balance}
