@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { getGetRosterQueryKey, useApplyPreset, useListPresets } from '@/api/generated/endpoints'
+import type { ShiftPatternItemDto } from '@/api/generated/model'
 import { ApiError } from '@/api/mutator'
 import { Button } from '@/components/ui/button'
 import {
@@ -37,6 +38,15 @@ interface Props {
 function errorMessage(error: unknown): string {
   if (error instanceof ApiError) return error.message
   return '요청 처리에 실패했습니다. 잠시 후 다시 시도해 주세요.'
+}
+
+/** N조가 실제로 어떤 패턴으로 반복되는지(예: "주주야야휴휴") 보여줘 조 선택을 돕는다 */
+function teamPatternLabel(items: ShiftPatternItemDto[], teamNo: number): string {
+  return items
+    .filter((i) => i.teamNo === teamNo)
+    .sort((a, b) => a.dayIndex - b.dayIndex)
+    .map((i) => i.cellLabel ?? i.shiftCode)
+    .join('')
 }
 
 /**
@@ -152,13 +162,15 @@ export function ApplyPresetDialog({
                   <Select value={teamNo} onValueChange={(v) => setTeamNo(v ?? '')}>
                     <SelectTrigger className="w-full">
                       <SelectValue placeholder="조 선택">
-                        {(v: string | null) => (v ? `${v}조` : '조 선택')}
+                        {(v: string | null) =>
+                          v ? `${v}조(${teamPatternLabel(preset.items, Number(v))})` : '조 선택'
+                        }
                       </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       {Array.from({ length: preset.teamCount }, (_, i) => i + 1).map((n) => (
                         <SelectItem key={n} value={String(n)}>
-                          {n}조
+                          {n}조({teamPatternLabel(preset.items, n)})
                         </SelectItem>
                       ))}
                     </SelectContent>
